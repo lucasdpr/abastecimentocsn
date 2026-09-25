@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChatMessage } from '@/lib/oms-system-prompt'
 import {
   Activity,
@@ -32,7 +32,6 @@ import {
   TrendingUp,
   Users,
   LogOut,
-  Settings,
   Printer,
   SlidersHorizontal,
   History,
@@ -125,8 +124,23 @@ function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string;
 }
 
 export default function Page() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => typeof window !== 'undefined' && window.localStorage.getItem('oms_session') === 'active')
-  const [user, setUser] = useState<UserProfile>(() => { if (typeof window !== 'undefined') { try { return JSON.parse(window.localStorage.getItem('oms_user') || '') } catch {} } return { name: 'Rafael', email: '', role: 'Mecânico' } })
+  const [mounted, setMounted] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<UserProfile>({ name: 'Rafael', email: '', role: 'Mecânico' })
+
+  useEffect(() => {
+    setMounted(true)
+    const storedSession = window.localStorage.getItem('oms_session') === 'active'
+    if (storedSession) {
+      try {
+        const storedUser = JSON.parse(window.localStorage.getItem('oms_user') || '') as UserProfile
+        if (storedUser?.name && storedUser?.role) setUser(storedUser)
+      } catch {
+        // Mantém o perfil padrão quando a sessão armazenada está inválida.
+      }
+    }
+    setIsAuthenticated(storedSession)
+  }, [])
   const profile = user.role
   const [view, setView] = useState<View>('Visão geral')
   const [messages, setMessages] = useState(initialMessages)
@@ -170,7 +184,7 @@ export default function Page() {
     }
   }
 
-  if (!isAuthenticated) return <LoginGate onEnter={enterSystem} />
+  if (!mounted || !isAuthenticated) return <LoginGate onEnter={enterSystem} />
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -182,10 +196,10 @@ export default function Page() {
         <span className="nav-label second">GOVERNANÇA</span>
         {nav.slice(4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Aprovações' && <em className="alert-count">4</em>}</button>)}
       </nav>
-      <div className="sidebar-foot"><div className="central-status"><span className="pulse" /><div><b>Central operacional</b><small>Última atualização há 2 min</small></div></div><div className="user-mini"><div className="avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div><b>{user?.name || 'Rafael'}</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar de conta ou sair">Trocar conta / Sair</button><Settings /></div></div>
+
     </aside>
     <main className="main-content">
-      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar"><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="top-avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div></div></header>
+      <header className="topbar" suppressHydrationWarning><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar"><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="header-status"><span className="pulse" /><span>Central operacional</span></div><div className="header-user"><div className="top-avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div><b>{user?.name || 'Rafael'}</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar conta ou sair">Trocar conta / Sair</button></div></div></header>
       {view === 'Assistente OMS' ? <ChatView messages={messages} draft={draft} setDraft={setDraft} sendMessage={sendMessage} /> : <>
         {view === 'Visão geral' && <SmartAlerts setView={setView} />}
         <div className="page-heading"><div><p className="eyebrow">Quarta-feira, 25 de setembro de 2026</p><h1>{view === 'Visão geral' ? `Bom dia, ${user?.name || 'Rafael'}.` : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" onClick={() => setView('Assistente OMS')}><MessageSquareText /> Nova solicitação</button></div>
