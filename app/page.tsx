@@ -124,12 +124,12 @@ function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string;
 }
 
 export default function Page() {
-  const [mounted, setMounted] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<UserProfile>({ name: 'Rafael', email: '', role: 'Mecânico' })
 
   useEffect(() => {
-    setMounted(true)
+    setIsMounted(true)
     const storedSession = window.localStorage.getItem('oms_session') === 'active'
     if (storedSession) {
       try {
@@ -196,7 +196,7 @@ export default function Page() {
     }
   }
 
-  if (!mounted || !isAuthenticated) return <LoginGate onEnter={enterSystem} />
+  if (!isMounted || !isAuthenticated) return <LoginGate onEnter={enterSystem} />
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -215,7 +215,7 @@ export default function Page() {
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={(nextView) => { setView(nextView); setPaletteOpen(false) }} />}
       {view === 'Assistente OMS' ? <ChatView messages={messages} draft={draft} setDraft={setDraft} sendMessage={sendMessage} /> : <>
         {view === 'Visão geral' && <SmartAlerts setView={setView} />}
-        <div className="page-heading"><div><p className="eyebrow">Quarta-feira, 25 de setembro de 2026</p><h1>{view === 'Visão geral' ? `Bom dia, ${user?.name || 'Rafael'}.` : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" title="Abrir formulário de nova solicitação" onClick={() => setRequestModal(true)}><MessageSquareText /> Nova solicitação</button></div>{requestModal && <RequestModal onClose={() => setRequestModal(false)} onSaved={() => { setRequestModal(false); setRequestToast('Nova solicitação criada com sucesso!'); setTimeout(() => setRequestToast(''), 2500) }} />}{requestToast && <div className="toast success"><Check />{requestToast}</div>}
+        <div className="page-heading"><div><p className="eyebrow" suppressHydrationWarning>{isMounted ? 'Quarta-feira, 25 de setembro de 2026' : '\u00a0'}</p><h1>{view === 'Visão geral' ? `Bom dia, ${user?.name || 'Rafael'}.` : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" title="Abrir formulário de nova solicitação" onClick={() => setRequestModal(true)}><MessageSquareText /> Nova solicitação</button></div>{requestModal && <RequestModal onClose={() => setRequestModal(false)} onSaved={() => { setRequestModal(false); setRequestToast('Nova solicitação criada com sucesso!'); setTimeout(() => setRequestToast(''), 2500) }} />}{requestToast && <div className="toast success"><Check />{requestToast}</div>}
         {view === 'Visão geral' && <Dashboard filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} setView={setView} />}
         {view === 'Ordens de Manutenção' && <OrdersView />}
         {view === 'Solicitações' && <RequestsView filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} />}
