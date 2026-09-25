@@ -16,6 +16,7 @@ import {
   Clock3,
   FileText,
   LayoutDashboard,
+  LogIn,
   Menu,
   MessageSquareText,
   PackageCheck,
@@ -93,6 +94,8 @@ function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string;
 }
 
 export default function Page() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => typeof document !== 'undefined' && document.cookie.includes('oms_session=active'))
+  const [profile, setProfile] = useState('Mecânico')
   const [view, setView] = useState<View>('Visão geral')
   const [messages, setMessages] = useState(initialMessages)
   const [draft, setDraft] = useState('')
@@ -100,6 +103,17 @@ export default function Page() {
   const [filter, setFilter] = useState('Todos')
 
   const filteredRequests = useMemo(() => filter === 'Todos' ? requests : requests.filter((item) => item.status.includes(filter)), [filter])
+
+  function enterSystem(nextProfile = profile) {
+    document.cookie = 'oms_session=active; path=/; max-age=86400'
+    setProfile(nextProfile)
+    setIsAuthenticated(true)
+  }
+
+  function leaveSystem() {
+    document.cookie = 'oms_session=; path=/; max-age=0'
+    setIsAuthenticated(false)
+  }
 
   async function sendMessage() {
     const value = draft.trim()
@@ -116,6 +130,8 @@ export default function Page() {
     }
   }
 
+  if (!isAuthenticated) return <LoginGate profile={profile} setProfile={setProfile} onEnter={enterSystem} />
+
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Wrench /></div><div><strong>OMS<span>•</span>Central</strong><small>Abastecimento de Manutenção</small></div><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu"><X /></button></div>
@@ -126,10 +142,10 @@ export default function Page() {
         <span className="nav-label second">GOVERNANÇA</span>
         {nav.slice(4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Aprovações' && <em className="alert-count">4</em>}</button>)}
       </nav>
-      <div className="sidebar-foot"><div className="central-status"><span className="pulse" /><div><b>Central operacional</b><small>Última atualização há 2 min</small></div></div><div className="user-mini"><div className="avatar">RS</div><div><b>Rafael Santos</b><small>Mecânico · OMS</small></div><button className="logout-button" onClick={() => { document.cookie = 'oms_session=; path=/; max-age=0'; window.location.href = '/login' }} aria-label="Sair">Sair</button><Settings /></div></div>
+      <div className="sidebar-foot"><div className="central-status"><span className="pulse" /><div><b>Central operacional</b><small>Última atualização há 2 min</small></div></div><div className="user-mini"><div className="avatar">RS</div><div><b>Lucas Gabriel</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar de conta ou sair">Trocar conta / Sair</button><Settings /></div></div>
     </aside>
     <main className="main-content">
-      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="icon-button" aria-label="Buscar"><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="top-avatar">RS</div></div></header>
+      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar"><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="top-avatar">RS</div></div></header>
       {view === 'Assistente OMS' ? <ChatView messages={messages} draft={draft} setDraft={setDraft} sendMessage={sendMessage} /> : <>
         <div className="page-heading"><div><p className="eyebrow">Quarta-feira, 25 de setembro de 2026</p><h1>{view === 'Visão geral' ? 'Bom dia, Rafael.' : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" onClick={() => setView('Assistente OMS')}><MessageSquareText /> Nova solicitação</button></div>
         {view === 'Visão geral' && <Dashboard filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} setView={setView} />}
@@ -140,6 +156,10 @@ export default function Page() {
       </>}
     </main>
   </div>
+}
+
+function LoginGate({ profile, setProfile, onEnter }: { profile: string; setProfile: (value: string) => void; onEnter: (value?: string) => void }) {
+  return <main className="auth-page"><button className="auth-quick-nav" onClick={() => onEnter('Demonstração')}><LayoutDashboard /> Ir para Dashboard</button><div className="auth-brand"><div className="brand-mark"><Wrench /></div><div><strong>OMS<span>•</span>Central</strong><small>Abastecimento de Manutenção</small></div></div><section className="auth-card"><div className="auth-card-head"><div className="auth-icon"><ShieldCheck /></div><p className="eyebrow">Central de Abastecimento · OMS</p><h1>Acesso ao sistema</h1><p>Entre para acompanhar solicitações, estoque e aprovações da Oficina de Moldes e Segmentos.</p></div><form onSubmit={(event) => { event.preventDefault(); onEnter(profile) }}><label>Perfil de acesso<select value={profile} onChange={(event) => setProfile(event.target.value)}><option>Mecânico</option><option>Analista</option><option>Admin</option></select></label><label>E-mail<input type="email" placeholder="seu.nome@csn.com.br" required /></label><label>Senha<input type="password" placeholder="••••••••" minLength={6} required /></label><button className="auth-submit" type="submit">Entrar no Sistema <ArrowUpRight /></button></form><button className="guest-link" onClick={() => onEnter('Demonstração')}>Acessar como Convidado / Modos de Demonstração</button><small className="auth-note">Acesso protegido · Oficina de Moldes e Segmentos · PL33</small></section></main>
 }
 
 function Dashboard({ filter, setFilter, filteredRequests, setView }: { filter: string; setFilter: (v: string) => void; filteredRequests: typeof requests; setView: (v: View) => void }) {
