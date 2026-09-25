@@ -6,6 +6,9 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
+  UserRound,
+  User,
+  Shield,
   BarChart3,
   Bell,
   Bot,
@@ -164,12 +167,12 @@ export default function Page() {
         <span className="nav-label second">GOVERNANÇA</span>
         {nav.slice(4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Aprovações' && <em className="alert-count">4</em>}</button>)}
       </nav>
-      <div className="sidebar-foot"><div className="central-status"><span className="pulse" /><div><b>Central operacional</b><small>Última atualização há 2 min</small></div></div><div className="user-mini"><div className="avatar">RS</div><div><b>Lucas Gabriel</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar de conta ou sair">Trocar conta / Sair</button><Settings /></div></div>
+      <div className="sidebar-foot"><div className="central-status"><span className="pulse" /><div><b>Central operacional</b><small>Última atualização há 2 min</small></div></div><div className="user-mini"><div className="avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div><b>{user?.name || 'Rafael'}</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar de conta ou sair">Trocar conta / Sair</button><Settings /></div></div>
     </aside>
     <main className="main-content">
-      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar"><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="top-avatar">RS</div></div></header>
+      <header className="topbar"><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar"><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="top-avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div></div></header>
       {view === 'Assistente OMS' ? <ChatView messages={messages} draft={draft} setDraft={setDraft} sendMessage={sendMessage} /> : <>
-        <div className="page-heading"><div><p className="eyebrow">Quarta-feira, 25 de setembro de 2026</p><h1>{view === 'Visão geral' ? 'Bom dia, Rafael.' : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" onClick={() => setView('Assistente OMS')}><MessageSquareText /> Nova solicitação</button></div>
+        <div className="page-heading"><div><p className="eyebrow">Quarta-feira, 25 de setembro de 2026</p><h1>{view === 'Visão geral' ? `Bom dia, ${user?.name || 'Rafael'}.` : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" onClick={() => setView('Assistente OMS')}><MessageSquareText /> Nova solicitação</button></div>
         {view === 'Visão geral' && <Dashboard filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} setView={setView} />}
         {view === 'Solicitações' && <RequestsView filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} />}
         {view === 'Follow-Up (FUP)' && <FupView />}
@@ -181,8 +184,28 @@ export default function Page() {
   </div>
 }
 
-function LoginGate({ profile, setProfile, onEnter }: { profile: string; setProfile: (value: string) => void; onEnter: (value?: string) => void }) {
-  return <main className="auth-page"><button className="auth-quick-nav" onClick={() => onEnter('Demonstração')}><LayoutDashboard /> Ir para Dashboard</button><div className="auth-brand"><div className="brand-mark"><Wrench /></div><div><strong>OMS<span>•</span>Central</strong><small>Abastecimento de Manutenção</small></div></div><section className="auth-card"><div className="auth-card-head"><div className="auth-icon"><ShieldCheck /></div><p className="eyebrow">Central de Abastecimento · OMS</p><h1>Acesso ao sistema</h1><p>Entre para acompanhar solicitações, estoque e aprovações da Oficina de Moldes e Segmentos.</p></div><form onSubmit={(event) => { event.preventDefault(); onEnter(profile) }}><label>Perfil de acesso<select value={profile} onChange={(event) => setProfile(event.target.value)}><option>Mecânico</option><option>Analista</option><option>Admin</option></select></label><label>E-mail<input type="email" placeholder="seu.nome@csn.com.br" required /></label><label>Senha<input type="password" placeholder="••••••••" minLength={6} required /></label><button className="auth-submit" type="submit">Entrar no Sistema <ArrowUpRight /></button></form><button className="guest-link" onClick={() => onEnter('Demonstração')}>Acessar como Convidado / Modos de Demonstração</button><small className="auth-note">Acesso protegido · Oficina de Moldes e Segmentos · PL33</small></section></main>
+function LoginGate({ onEnter }: { onEnter: (value?: UserProfile) => void }) {
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [name, setName] = useState('')
+  const [profile, setProfile] = useState('Mecânico')
+  const profiles = [{ label: 'Mecânico', icon: Wrench }, { label: 'Analista', icon: UserRound }, { label: 'Admin', icon: Shield }]
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault()
+    const displayName = name.trim() || 'Rafael'
+    onEnter({ name: displayName, email: '', role: profile })
+  }
+
+  return <main className="auth-page">
+    <section className="auth-visual">
+      <div className="auth-visual-top"><div className="brand-mark"><Wrench /></div><div><strong>OMS<span>•</span>Central</strong><small>Abastecimento de Manutenção</small></div></div>
+      <div className="auth-visual-copy"><span className="auth-badge"><span /> Sistema de Abastecimento Industrial</span><h1>Decisões críticas.<br /><em>Fluxo sob controle.</em></h1><p>A central única para materiais, aprovações e rastreabilidade da Oficina de Moldes e Segmentos.</p></div>
+      <div className="auth-stat-card"><div className="stat-orb"><TrendingUp /></div><div><small>Carteira FUP monitorada</small><strong>R$ 251,1M</strong><span><ArrowUpRight /> +12,8% este mês</span></div></div>
+      <div className="auth-grid-lines" />
+      <small className="auth-visual-foot">CSN · UNIDADE VOLTA REDONDA · PL33</small>
+    </section>
+    <section className="auth-form-side"><button className="auth-quick-nav" onClick={() => onEnter({ name: 'Demonstração', email: '', role: 'Mecânico' })}><LayoutDashboard /> Ir para Dashboard</button><div className="auth-card"><div className="auth-card-head"><div className="auth-icon"><ShieldCheck /></div><p className="eyebrow">Central de Abastecimento · OMS</p><h2>{mode === 'login' ? 'Acesso ao sistema' : 'Crie seu acesso'}</h2><p>{mode === 'login' ? 'Entre para acompanhar o abastecimento da sua oficina.' : 'Configure seu perfil para começar a operar.'}</p></div><div className="auth-tabs"><button type="button" className={mode === 'login' ? 'selected' : ''} onClick={() => setMode('login')}>Entrar</button><button type="button" className={mode === 'signup' ? 'selected' : ''} onClick={() => setMode('signup')}>Criar conta</button></div><form onSubmit={submit}>{mode === 'signup' && <label><span>Seu nome completo</span><div className="input-icon"><User /><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ex.: Rafael Silva" required /></div></label>}<label><span>E-mail corporativo</span><input type="email" placeholder="seu.nome@csn.com.br" required /></label><label><span>Senha</span><input type="password" placeholder="••••••••" minLength={6} required /></label><div><span className="field-caption">Perfil de acesso</span><div className="profile-chips">{profiles.map(({ label, icon: Icon }) => <button type="button" key={label} className={profile === label ? 'selected' : ''} onClick={() => setProfile(label)}><Icon />{label}</button>)}</div></div><button className="auth-submit" type="submit">Entrar no Sistema <ArrowUpRight /></button></form><button className="guest-link" onClick={() => onEnter({ name: 'Demonstração', email: '', role: 'Mecânico' })}>Acessar como Convidado / Modos de Demonstração</button><small className="auth-note">Acesso protegido · Oficina de Moldes e Segmentos · PL33</small></div></section>
+  </main>
 }
 
 function Dashboard({ filter, setFilter, filteredRequests, setView }: { filter: string; setFilter: (v: string) => void; filteredRequests: typeof requests; setView: (v: View) => void }) {
