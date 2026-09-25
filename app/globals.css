@@ -51,7 +51,7 @@ button { cursor: pointer; }
 .modal-card input, .modal-card select { border:1px solid #dce5e9; border-radius:6px; padding:10px; outline:0; color:#294658; background:#fff; font-weight:400; }
 .modal-close { position:absolute; right:18px; top:18px; border:0; background:transparent; color:#8b9aa4; padding:4px; }
 .modal-close svg { width:16px; }
-.modal-submit { margin-top:22px; justify-content:center; width:100%; }
+.modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:22px; }.modal-actions .modal-submit { margin-top:0; width:auto; }.modal-actions button:disabled { opacity:.45; cursor:not-allowed; }.modal-submit { margin-top:22px; justify-content:center; width:100%; }
 @media (max-width: 760px) { .orders-toolbar { align-items:stretch; flex-direction:column; padding:0 18px 14px; } .search-field { min-width:0; } .modal-card { padding:22px; } }
 
 /* Industrial premium access screen */
