@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import type { ChatMessage } from '@/lib/oms-system-prompt'
 import {
   Activity,
   AlertTriangle,
@@ -80,11 +81,19 @@ export default function Page() {
 
   const filteredRequests = useMemo(() => filter === 'Todos' ? requests : requests.filter((item) => item.status.includes(filter)), [filter])
 
-  function sendMessage() {
+  async function sendMessage() {
     const value = draft.trim()
     if (!value) return
-    setMessages((current) => [...current, { role: 'user', text: value }, { role: 'assistant', text: 'Vou validar essa demanda no fluxo oficial. Primeiro, confirme o número da **OM** e o equipamento para que eu possa continuar.' }])
+    const nextMessages = [...messages, { role: 'user', text: value }]
+    setMessages([...nextMessages, { role: 'assistant', text: 'Validando no fluxo oficial da Central...' }])
     setDraft('')
+    try {
+      const response = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages: nextMessages.map((item) => ({ role: item.role, content: item.text })) satisfies ChatMessage[] }) })
+      const data = await response.json()
+      setMessages([...nextMessages, { role: 'assistant', text: data.message ?? 'Não foi possível validar a demanda.' }])
+    } catch {
+      setMessages([...nextMessages, { role: 'assistant', text: 'Não foi possível conectar ao Assistente. Confirme a **OM** e tente novamente.' }])
+    }
   }
 
   return <div className="app-shell">
