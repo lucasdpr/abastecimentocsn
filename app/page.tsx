@@ -23,6 +23,12 @@ import {
   Plus,
   Search,
   Send,
+  CircleDollarSign,
+  Download,
+  Filter,
+  TrendingUp,
+  Users,
+  LogOut,
   Settings,
   ShieldCheck,
   Truck,
@@ -30,13 +36,24 @@ import {
   X,
 } from 'lucide-react'
 
-type View = 'Visão geral' | 'Assistente OMS' | 'Ordens de Manutenção' | 'Solicitações' | 'Estoque' | 'Aprovações' | 'Relatórios'
+type View = 'Visão geral' | 'Assistente OMS' | 'Ordens de Manutenção' | 'Solicitações' | 'Follow-Up (FUP)' | 'Estoque' | 'Aprovações' | 'Relatórios'
+
+type UserProfile = { name: string; email: string; role: string }
+
+const fupOrders = [
+  { material: '8019764', description: 'RESFRIADOR KAWASAKI 3114621031', po: '4500098214', item: '10', supplier: 'Kawasaki Heavy Industries', date: '18/09/2026', owner: 'Fornecedor', return: 'Não', status: 'Atraso', value: 1562705.03 },
+  { material: '1671352', description: 'PLACA NIPPON STEEL B354714 01 ATE 03', po: '4500097988', item: '20', supplier: 'Nippon Steel', date: '25/09/2026', owner: 'Tratado', return: 'Sim', status: 'No Prazo', value: 1715081.58 },
+  { material: '9412785', description: 'MANIPULADOR BARDELLA CSNVAI7002', po: '4500097551', item: '10', supplier: 'Bardella S.A.', date: '12/08/2026', owner: 'Fornecedor', return: 'Não', status: 'Atraso', value: 822500 },
+  { material: '8127604', description: 'COMPRESSOR NITROGENIO 203 M3/H', po: '4500097440', item: '30', supplier: 'Atlas Copco', date: '30/09/2026', owner: 'GPMA', return: 'Sim', status: 'No Prazo', value: 1117456.30 },
+  { material: '8614519', description: 'ROTOR KAWASAKI 3112561021', po: '4500097312', item: '10', supplier: 'Kawasaki Heavy Industries', date: '05/09/2026', owner: 'Central', return: 'Sim', status: 'Atraso', value: 1155383.54 },
+]
 
 const nav: { label: View; icon: typeof LayoutDashboard }[] = [
   { label: 'Visão geral', icon: LayoutDashboard },
   { label: 'Assistente OMS', icon: MessageSquareText },
   { label: 'Ordens de Manutenção', icon: Wrench },
   { label: 'Solicitações', icon: ClipboardCheck },
+  { label: 'Follow-Up (FUP)', icon: TrendingUp },
   { label: 'Estoque', icon: Boxes },
   { label: 'Aprovações', icon: ShieldCheck },
   { label: 'Relatórios', icon: FileText },
@@ -94,8 +111,9 @@ function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string;
 }
 
 export default function Page() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => typeof document !== 'undefined' && document.cookie.includes('oms_session=active'))
-  const [profile, setProfile] = useState('Mecânico')
+  const [isAuthenticated, setIsAuthenticated] = useState(() => typeof window !== 'undefined' && window.localStorage.getItem('oms_session') === 'active')
+  const [user, setUser] = useState<UserProfile>(() => { if (typeof window !== 'undefined') { try { return JSON.parse(window.localStorage.getItem('oms_user') || '') } catch {} } return { name: 'Rafael', email: '', role: 'Mecânico' } })
+  const profile = user.role
   const [view, setView] = useState<View>('Visão geral')
   const [messages, setMessages] = useState(initialMessages)
   const [draft, setDraft] = useState('')
@@ -104,14 +122,18 @@ export default function Page() {
 
   const filteredRequests = useMemo(() => filter === 'Todos' ? requests : requests.filter((item) => item.status.includes(filter)), [filter])
 
-  function enterSystem(nextProfile = profile) {
+  function enterSystem(nextUser: UserProfile = user) {
     document.cookie = 'oms_session=active; path=/; max-age=86400'
-    setProfile(nextProfile)
+    window.localStorage.setItem('oms_session', 'active')
+    window.localStorage.setItem('oms_user', JSON.stringify(nextUser))
+    setUser(nextUser)
     setIsAuthenticated(true)
   }
 
   function leaveSystem() {
     document.cookie = 'oms_session=; path=/; max-age=0'
+    window.localStorage.removeItem('oms_session')
+    window.localStorage.removeItem('oms_user')
     setIsAuthenticated(false)
   }
 
@@ -130,7 +152,7 @@ export default function Page() {
     }
   }
 
-  if (!isAuthenticated) return <LoginGate profile={profile} setProfile={setProfile} onEnter={enterSystem} />
+  if (!isAuthenticated) return <LoginGate onEnter={enterSystem} />
 
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -150,6 +172,7 @@ export default function Page() {
         <div className="page-heading"><div><p className="eyebrow">Quarta-feira, 25 de setembro de 2026</p><h1>{view === 'Visão geral' ? 'Bom dia, Rafael.' : view}</h1><p className="subtitle">{view === 'Visão geral' ? 'Acompanhe o abastecimento e as demandas da sua oficina.' : 'Acompanhe e gerencie o fluxo oficial da Central de Abastecimento.'}</p></div><button className="primary-button" onClick={() => setView('Assistente OMS')}><MessageSquareText /> Nova solicitação</button></div>
         {view === 'Visão geral' && <Dashboard filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} setView={setView} />}
         {view === 'Solicitações' && <RequestsView filter={filter} setFilter={setFilter} filteredRequests={filteredRequests} />}
+        {view === 'Follow-Up (FUP)' && <FupView />}
         {view === 'Estoque' && <StockView />}
         {view === 'Aprovações' && <ApprovalsView />}
         {view === 'Relatórios' && <ReportsView />}
@@ -174,6 +197,16 @@ function Dashboard({ filter, setFilter, filteredRequests, setView }: { filter: s
 }
 
 function RequestTable({ rows }: { rows: typeof requests }) { return <div className="table-wrap"><table><thead><tr><th>Solicitação</th><th>Item principal</th><th>Quantidade</th><th>Status</th><th>Atualização</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><b>{row.id}</b><span>{row.om}</span></td><td>{row.item}</td><td>{row.qty}</td><td><StatusBadge tone={row.tone}>{row.status}</StatusBadge></td><td className="muted">{row.age}</td><td><button className="row-action" aria-label={`Abrir ${row.id}`}><ArrowUpRight /></button></td></tr>)}</tbody></table></div> }
+function FupView() {
+  const total = fupOrders.reduce((sum, item) => sum + item.value, 0)
+  const withReturn = fupOrders.filter((item) => item.return === 'Sim').reduce((sum, item) => sum + item.value, 0)
+  const overdue = fupOrders.filter((item) => item.status === 'Atraso').reduce((sum, item) => sum + item.value, 0)
+  return <section className="fup-view">
+    <div className="fup-kpis"><MetricCard label="Carteira FUP" value={currency.format(total)} detail="Ordens de compra acompanhadas" icon={BarChart3} tone="navy" /><MetricCard label="Com retorno" value={currency.format(withReturn)} detail="Fornecedores com retorno registrado" icon={Check} tone="green" /><MetricCard label="Em atraso" value={currency.format(overdue)} detail={`${Math.round((overdue / total) * 100)}% do valor acompanhado`} icon={AlertTriangle} tone="amber" /></div>
+    <section className="panel full-panel"><div className="panel-head"><div><h2>Follow-Up de materiais</h2><p>Carteira carregada do Dashboard FUP · atualização em 16/09/2026</p></div><div className="panel-actions"><StatusBadge tone="blue">6 ordens acompanhadas</StatusBadge><button className="secondary-button"><Download /> Exportar CSV</button></div></div><div className="fup-summary"><div><span>Total</span><b>{currency.format(total)}</b></div><div><span>Com retorno</span><b className="green-text">{currency.format(withReturn)}</b></div><div><span>Sem retorno</span><b className="amber-text">{currency.format(total - withReturn)}</b></div></div><div className="table-wrap"><table><thead><tr><th>Material</th><th>Descrição</th><th>Pedido</th><th>Fornecedor</th><th>Prazo</th><th>Retorno</th><th>Valor</th></tr></thead><tbody>{fupOrders.map((item) => <tr key={item.po}><td><b>{item.material}</b><span>Item {item.item}</span></td><td>{item.description}</td><td>{item.po}</td><td>{item.supplier}</td><td>{item.date}</td><td><StatusBadge tone={item.return === 'Sim' ? 'green' : 'amber'}>{item.status}</StatusBadge></td><td><b>{currency.format(item.value)}</b></td></tr>)}</tbody></table></div></section>
+  </section>
+}
+
 function RequestsView({ filter, setFilter, filteredRequests }: { filter: string; setFilter: (v: string) => void; filteredRequests: typeof requests }) { return <section className="panel full-panel"><div className="panel-head"><div><h2>Carteira de solicitações</h2><p>Fluxo centralizado de materiais, ferramentas e insumos.</p></div><div className="filter-tabs">{['Todos', 'Aguardando', 'Em compra'].map((item) => <button key={item} className={filter === item ? 'selected' : ''} onClick={() => setFilter(item)}>{item}</button>)}</div></div><RequestTable rows={filteredRequests} /></section> }
 function StockView() { return <section className="panel full-panel"><div className="panel-head"><div><h2>Consulta de estoque</h2><p>Saldos oficiais PL33 e área · atualização em tempo real</p></div><button className="secondary-button"><Plus /> Registrar movimentação</button></div><div className="stock-summary"><div><span>Itens cadastrados</span><b>1.284</b></div><div><span>Saldo comprometido</span><b>R$ 96,4k</b></div><div><span>Itens em atenção</span><b className="amber-text">17</b></div></div><div className="table-wrap"><table><thead><tr><th>Código</th><th>Descrição</th><th>Classe</th><th>PL33</th><th>Área</th><th>Situação</th></tr></thead><tbody>{stock.map((item) => <tr key={item.code}><td><b>{item.code}</b></td><td>{item.name}</td><td>{item.className}</td><td>{item.pl33} {item.pl33 === 0 && <span className="critical">crítico</span>}</td><td>{item.area}</td><td><StatusBadge tone={item.state === 'Seguro' ? 'green' : item.state === 'Atenção' ? 'amber' : 'purple'}>{item.state}</StatusBadge></td></tr>)}</tbody></table></div></section> }
 function ApprovalsView() { return <section className="panel full-panel"><div className="panel-head"><div><h2>Aprovações pendentes</h2><p>Valide as solicitações conforme o fluxo de governança.</p></div><span className="approval-progress">12 de 16 concluídas</span></div><div className="approval-list">{[['REQ-24091', 'Jogo de vedações hidráulicas', 'OM 45021876', 'GG'], ['REQ-24083', 'Bucha de bronze especial', 'OM 45021710', 'GDOP'], ['REQ-24078', 'Segmento de molde CC-04', 'OM 45021698', 'D']].map(([id, item, om, level]) => <div className="approval-row" key={id}><div className="approval-level">{level}</div><div className="approval-info"><b>{id} · {item}</b><span>{om} · Solicitado pela OMS em 24/09</span></div><StatusBadge tone="amber">Aguardando {level}</StatusBadge><div className="approval-buttons"><button className="approve"><Check /> Aprovar</button><button className="reject"><X /> Rejeitar</button></div></div>)}</div></section> }
