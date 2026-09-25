@@ -27,6 +27,8 @@ import {
   Search,
   Send,
   CircleDollarSign,
+  Sun,
+  Moon,
   Download,
   Filter,
   TrendingUp,
@@ -151,11 +153,17 @@ export default function Page() {
   const [filter, setFilter] = useState('Todos')
   const [isTyping, setIsTyping] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notifications, setNotifications] = useState(['Nova OM #80014873099 cadastrada para o Conversor B', 'Item MOL-SG-004 atingiu o limite crítico na PL33', 'Fornecedor atualizou a data do Pedido 4504791859'])
+  const [unitOpen, setUnitOpen] = useState(false)
+  const [selectedUnit, setSelectedUnit] = useState('Oficina de Moldes e Segmentos')
+  const [unitToast, setUnitToast] = useState('')
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setPaletteOpen(true) }
-      if (event.key === 'Escape') { setPaletteOpen(false); setRequestModal(false) }
+      if (event.key === 'Escape') { setPaletteOpen(false); setRequestModal(false); setNotificationsOpen(false); setUnitOpen(false) }
     }
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
@@ -198,10 +206,10 @@ export default function Page() {
 
   if (!isMounted || !isAuthenticated) return <LoginGate onEnter={enterSystem} />
 
-  return <div className="app-shell">
+  return <div className={`app-shell ${darkMode ? 'dark-mode' : ''}`}>
     <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Wrench /></div><div><strong>OMS<span>•</span>Central</strong><small>Abastecimento de Manutenção</small></div><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu"><X /></button></div>
-      <div className="scope"><span className="scope-dot" /><div><b>Oficina de Moldes e Segmentos</b><small>Unidade Volta Redonda · PL33</small></div><ChevronDown /></div>
+      <div className="scope-wrap"><button className="scope" onClick={() => setUnitOpen(!unitOpen)} aria-expanded={unitOpen}><span className="scope-dot" /><div><b>{selectedUnit}</b><small>{selectedUnit === 'Oficina de Moldes e Segmentos' ? 'Unidade Volta Redonda · PL33' : 'Unidade operacional CSN'}</small></div><ChevronDown /></button>{unitOpen && <div className="unit-dropdown">{['Oficina de Moldes e Segmentos', 'Aciaria - Conversores', 'Laminação a Frio (CSN UPV)'].map((unit) => <button key={unit} onClick={() => { setSelectedUnit(unit); setUnitOpen(false); setUnitToast(`Visão alterada para: ${unit}`); setTimeout(() => setUnitToast(''), 2500) }}>{unit}{selectedUnit === unit && <Check />}</button>)}</div>}</div>
       <nav className="nav-list" aria-label="Navegação principal">
         <span className="nav-label">OPERAÇÃO</span>
         {nav.slice(0, 4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Solicitações' && <em>12</em>}</button>)}
@@ -211,7 +219,7 @@ export default function Page() {
 
     </aside>
     <main className="main-content">
-      <header className="topbar" suppressHydrationWarning><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar" title="Busca global (Ctrl/⌘ K)" onClick={() => setPaletteOpen(true)}><Search /></button><button className="icon-button notification" aria-label="Notificações"><Bell /><i /></button><div className="header-status"><span className="pulse" /><span>Central operacional</span></div><div className="header-user"><div className="top-avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div><b>{user?.name || 'Rafael'}</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar conta ou sair">Trocar conta / Sair</button></div></div></header>
+      <header className="topbar" suppressHydrationWarning><button className="mobile-menu" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu /></button><div className="breadcrumb"><span>OMS Central</span><span>/</span><b>{view}</b></div><div className="top-actions"><button className="switch-button" onClick={leaveSystem}><LogIn /> Ir para Login</button><button className="icon-button" aria-label="Buscar" title="Busca global (Ctrl/⌘ K)" onClick={() => setPaletteOpen(true)}><Search /></button><div className="notification-wrap"><button className="icon-button notification" aria-label="Notificações" title="Abrir notificações" onClick={() => setNotificationsOpen(!notificationsOpen)}><Bell />{notifications.length > 0 && <i />}</button>{notificationsOpen && <div className="notification-dropdown"><div className="notification-head"><b>Notificações</b><span>{notifications.length} pendentes</span></div>{notifications.length > 0 ? notifications.map((notification) => <div className="notification-item" key={notification}><span className="notification-dot" /><p>{notification}</p></div>) : <p className="notification-empty">Tudo lido por aqui.</p>}<button className="notification-clear" onClick={() => setNotifications([])}>Marcar todas como lidas</button></div>}</div><button className="theme-toggle" title={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'} aria-label={darkMode ? 'Ativar tema claro' : 'Ativar tema escuro'} onClick={() => setDarkMode(!darkMode)}>{darkMode ? <Sun /> : <Moon />}</button><div className="header-status"><span className="pulse" /><span>Central operacional</span></div><div className="header-user"><div className="top-avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div><b>{user?.name || 'Rafael'}</b><small>{profile} · OMS</small></div><button className="logout-button" onClick={leaveSystem} aria-label="Trocar conta ou sair">Trocar conta / Sair</button></div></div></header>
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={(nextView) => { setView(nextView); setPaletteOpen(false) }} />}
       {view === 'Assistente OMS' ? <ChatView messages={messages} draft={draft} setDraft={setDraft} sendMessage={sendMessage} /> : <>
         {view === 'Visão geral' && <SmartAlerts setView={setView} />}
@@ -224,7 +232,7 @@ export default function Page() {
         {view === 'Aprovações' && <ApprovalsView />}
         {view === 'Relatórios' && <ReportsView />}
       </>}
-    </main>
+    </main>{unitToast && <div className="toast success"><Check />{unitToast}</div>}
   </div>
 }
 
