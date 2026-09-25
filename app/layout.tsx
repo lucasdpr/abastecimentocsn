@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'OMS Central | Abastecimento de Manutenção',
+  description: 'Central de Abastecimento de Manutenção da CSN para a Oficina de Moldes e Segmentos.',
   generator: 'v0.app',
   icons: {
     icon: [
