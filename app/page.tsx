@@ -38,6 +38,7 @@ import {
   LogOut,
   Printer,
   SlidersHorizontal,
+  Settings,
   History,
   ShieldAlert,
   FileSpreadsheet,
@@ -233,7 +234,7 @@ export default function Page() {
       <div className="scope-wrap"><button className="scope" onClick={() => setUnitOpen(!unitOpen)} aria-expanded={unitOpen}><span className="scope-dot" /><div><b>{selectedUnit}</b><small>Unidade Volta Redonda · PL33</small></div><ChevronDown /></button>{unitOpen && <div className="unit-dropdown">{['Oficina de Moldes e Segmentos'].map((unit) => <button key={unit} onClick={() => { setSelectedUnit(unit); setUnitOpen(false); setUnitToast(`Visão alterada para: ${unit}`); setTimeout(() => setUnitToast(''), 2500) }}>{unit}{selectedUnit === unit && <Check />}</button>)}</div>}</div>
       <nav className="nav-list" aria-label="Navegação principal">
         <span className="nav-label">OPERA��ÃO</span>
-        {nav.slice(0, 4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Solicitações' && <em>12</em>}</button>)}
+        {nav.slice(0, 4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Solicita��ões' && <em>12</em>}</button>)}
         <span className="nav-label second">GOVERNANÇA</span>
         {nav.slice(4).map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setSidebarOpen(false) }} className={`nav-item ${view === label ? 'active' : ''}`}><Icon /><span>{label}</span>{label === 'Aprovações' && <em className="alert-count">4</em>}</button>)}
       </nav>

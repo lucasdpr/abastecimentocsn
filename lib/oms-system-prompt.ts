@@ -35,15 +35,25 @@ export async function answerOmsChat(messages: ChatMessage[]): Promise<ChatRespon
   const gatewayKey = process.env.AI_GATEWAY_API_KEY;
   if (!gatewayKey) return fallback(latest);
 
-  const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${gatewayKey}` },
-    body: JSON.stringify({
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  let response: Response;
+  try {
+    response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${gatewayKey}` },
+      body: JSON.stringify({
       model: process.env.OMS_AI_MODEL ?? 'openai/gpt-4o-mini',
       messages: [{ role: 'system', content: OMS_SYSTEM_PROMPT }, ...messages.map((item) => ({ role: item.role, content: item.content }))],
       temperature: 0.2,
     }),
-  });
+      });
+  } catch {
+    return fallback(latest);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) return fallback(latest);
   const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
