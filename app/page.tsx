@@ -161,6 +161,7 @@ export default function Page() {
   const [messages, setMessages] = useState(initialMessages)
   const [draft, setDraft] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [filter, setFilter] = useState('Todos')
   const [isTyping, setIsTyping] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -220,7 +221,7 @@ export default function Page() {
   if (!isMounted || !isAuthenticated) return <LoginGate onEnter={enterSystem} />
 
   return <div className={`app-shell ${darkMode ? 'dark-mode' : ''}`}>
-    <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+    {sidebarOpen && <button className="drawer-scrim" aria-label="Fechar menu" onClick={() => setSidebarOpen(false)} />}<aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
       <div className="brand"><div className="brand-mark"><Wrench /></div><div><strong>OMS<span>•</span>Central</strong><small>Abastecimento de Manutenção</small></div><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu"><X /></button></div>
       <div className="scope-wrap"><button className="scope" onClick={() => setUnitOpen(!unitOpen)} aria-expanded={unitOpen}><span className="scope-dot" /><div><b>{selectedUnit}</b><small>{selectedUnit === 'Oficina de Moldes e Segmentos' ? 'Unidade Volta Redonda · PL33' : 'Unidade operacional CSN'}</small></div><ChevronDown /></button>{unitOpen && <div className="unit-dropdown">{['Oficina de Moldes e Segmentos', 'Aciaria - Conversores', 'Laminação a Frio (CSN UPV)'].map((unit) => <button key={unit} onClick={() => { setSelectedUnit(unit); setUnitOpen(false); setUnitToast(`Visão alterada para: ${unit}`); setTimeout(() => setUnitToast(''), 2500) }}>{unit}{selectedUnit === unit && <Check />}</button>)}</div>}</div>
       <nav className="nav-list" aria-label="Navegação principal">
@@ -245,9 +246,11 @@ export default function Page() {
         {view === 'Aprovações' && <ApprovalsView />}
         {view === 'Relatórios' && <ReportsView />}
       </>}
-    </main>{unitToast && <div className="toast success"><Check />{unitToast}</div>}
+    </main><MobileBottomNav view={view} setView={(nextView) => { setView(nextView); setMobileMoreOpen(false) }} moreOpen={mobileMoreOpen} setMoreOpen={setMobileMoreOpen} />{unitToast && <div className="toast success"><Check />{unitToast}</div>}
   </div>
 }
+
+function MobileBottomNav({ view, setView, moreOpen, setMoreOpen }: { view: View; setView: (view: View) => void; moreOpen: boolean; setMoreOpen: (open: boolean) => void }) { const items: { label: string; view: View; icon: typeof LayoutDashboard }[] = [{ label: 'Início', view: 'Visão geral', icon: LayoutDashboard }, { label: 'OMs', view: 'Ordens de Manutenção', icon: ClipboardCheck }, { label: 'Assistente', view: 'Assistente OMS', icon: Bot }, { label: 'FUP', view: 'Follow-Up (FUP)', icon: Truck }]; return <><nav className="mobile-bottom-nav" aria-label="Navegação mobile">{items.map(({ label, view: itemView, icon: Icon }) => <button key={label} className={view === itemView ? 'active' : ''} onClick={() => setView(itemView)}><Icon /><span>{label}</span></button>)}<button className={moreOpen ? 'active' : ''} onClick={() => setMoreOpen(!moreOpen)}><Menu /><span>Mais</span></button></nav>{moreOpen && <div className="mobile-more-sheet"><button onClick={() => setView('Estoque')}><PackageCheck />Estoque</button><button onClick={() => setView('Aprovações')}><ShieldCheck />Aprovações</button><button onClick={() => setView('Relatórios')}><FileSpreadsheet />Relatórios</button><button onClick={() => setMoreOpen(false)}><X />Fechar</button></div>}</> }
 
 function FieldModeModal({ onClose, onRequestPart }: { onClose: () => void; onRequestPart: () => void }) { return <div className="modal-backdrop" onClick={onClose}><div className="field-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="modal-close" onClick={onClose} aria-label="Fechar"><X /></button><div className="field-modal-head"><div className="scan-icon"><ScanLine /></div><div><p className="eyebrow">Modo de campo · Leitor operacional</p><h2>Equipamento identificado</h2></div></div><div className="qr-scan"><ScanLine /><span>TAG-CC04-PL33</span></div><div className="field-equipment"><small>Equipamento</small><strong>Conversor B - Junta Hidráulica CC-04</strong><StatusBadge tone="green">Operacional</StatusBadge></div><div className="field-facts"><div><span>Última substituição</span><b>14/08/2026</b></div><div><span>Status na PL33</span><b>Disponível</b></div><div><span>OM associada</span><b>80014872941</b></div></div><button className="primary-button field-request" onClick={onRequestPart}><Plus /> Solicitar Peça de Reposição</button></div></div> }
 
