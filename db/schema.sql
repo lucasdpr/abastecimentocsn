@@ -8,9 +8,14 @@ create table if not exists usuarios (
   perfil text not null check (perfil in ('admin', 'abastecimento', 'gerencia', 'consulta')),
   senha_hash text not null,
   ativo boolean not null default true,
+  -- true = veio do autocadastro e ainda não foi aprovado por um administrador.
+  pendente_aprovacao boolean not null default false,
+  matricula text,
   criado_em timestamptz not null default now(),
   ultimo_acesso timestamptz
 );
+alter table usuarios add column if not exists pendente_aprovacao boolean not null default false;
+alter table usuarios add column if not exists matricula text;
 
 create table if not exists configuracoes (
   chave text primary key,

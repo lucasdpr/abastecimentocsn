@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { InstalarApp } from '@/components/instalar-app'
+import { ArrowLeft } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { FormLogin } from './form-login'
+import { FormCadastro } from './form-cadastro'
 
-export const metadata = { title: 'Entrar' }
+export const metadata = { title: 'Criar conta' }
 
-export default async function Login() {
+export default async function Cadastro() {
   const usuario = await usuarioAtual().catch(() => null)
   if (usuario) redirect('/')
   return (
@@ -21,17 +21,13 @@ export default async function Login() {
           </div>
         </div>
         <div className="card p-6">
-          <h2 className="text-base font-semibold">Entrar</h2>
-          <p className="mb-5 text-sm text-muted">Use o acesso fornecido pela Central.</p>
-          <FormLogin />
-          <Link href="/cadastro" className="mt-4 block text-center text-sm text-accent hover:underline">
-            Criar conta
-          </Link>
+          <h2 className="text-base font-semibold">Criar conta</h2>
+          <p className="mb-5 text-sm text-muted">Sua conta começa como Consulta e depende de aprovação de um administrador.</p>
+          <FormCadastro />
         </div>
-        <div className="mt-4">
-          <InstalarApp />
-        </div>
-        <p className="mt-6 text-center text-xs text-muted">Ferramenta de apoio ao SAP. Os dados oficiais permanecem no SAP.</p>
+        <Link href="/login" className="mt-6 flex items-center justify-center gap-1.5 text-sm text-muted hover:text-ink">
+          <ArrowLeft className="size-4" /> Já tenho conta
+        </Link>
       </div>
     </main>
   )
