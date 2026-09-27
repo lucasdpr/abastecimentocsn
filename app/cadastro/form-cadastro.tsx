@@ -25,7 +25,7 @@ export function FormCadastro() {
       </div>
       <div>
         <label className="label" htmlFor="matricula">Matrícula</label>
-        <input className="input h-11" id="matricula" name="matricula" autoComplete="off" required />
+        <input className="input h-11" id="matricula" name="matricula" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} required />
       </div>
       <div>
         <label className="label" htmlFor="email">E-mail</label>
@@ -33,7 +33,8 @@ export function FormCadastro() {
       </div>
       <div>
         <label className="label" htmlFor="senha">Senha</label>
-        <input className="input h-11" id="senha" name="senha" type="password" autoComplete="new-password" minLength={8} required />
+        <input className="input h-11" id="senha" name="senha" type="password" autoComplete="new-password" required />
+        <p className="mt-1 text-xs text-muted">Mínimo de 8 caracteres.</p>
       </div>
       {estado?.erro && <p className="rounded-lg bg-crit-soft px-3 py-2 text-sm text-crit-ink">{estado.erro}</p>}
       <button className="btn btn-primary h-11 w-full" disabled={pendente}>

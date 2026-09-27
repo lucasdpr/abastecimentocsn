@@ -68,7 +68,7 @@ export async function entrar(_: Resultado, form: FormData): Promise<Resultado> {
 
 export async function cadastrar(_: Resultado, form: FormData): Promise<Resultado> {
   const nome = texto(form, 'nome')
-  const matricula = texto(form, 'matricula')
+  const matricula = texto(form, 'matricula')?.toUpperCase()
   const email = texto(form, 'email')?.toLowerCase()
   const senha = texto(form, 'senha')
   if (!nome || !matricula || !email || !senha) return { erro: 'Preencha nome, matrícula, e-mail e senha.' }
@@ -246,7 +246,7 @@ export async function salvarUsuario(_: Resultado, form: FormData): Promise<Resul
   const id = Number(texto(form, 'id') ?? 0)
   const email = texto(form, 'email')?.toLowerCase()
   const nome = texto(form, 'nome')
-  const matricula = texto(form, 'matricula')
+  const matricula = texto(form, 'matricula')?.toUpperCase() ?? null
   const perfil = texto(form, 'perfil') as Perfil | null
   const senha = texto(form, 'senha')
   const ativo = form.get('ativo') !== 'nao'
