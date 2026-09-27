@@ -16,6 +16,11 @@ import { query, queryOne } from '@/lib/db'
 
 export type Resultado = { ok?: boolean; erro?: string } | null
 
+/** Código de e-mail já cadastrado (unique_violation do Postgres) vs. qualquer outro erro de banco. */
+function erroEmailDuplicado(erro: unknown) {
+  return typeof erro === 'object' && erro !== null && 'code' in erro && (erro as { code: unknown }).code === '23505'
+}
+
 const texto = (f: FormData, k: string) => {
   const v = f.get(k)
   return typeof v === 'string' && v.trim() ? v.trim() : null
@@ -42,14 +47,43 @@ export async function entrar(_: Resultado, form: FormData): Promise<Resultado> {
   } catch {
     return { erro: 'Banco de dados indisponível. Verifique a configuração (DATABASE_URL).' }
   }
-  const usuario = await queryOne<{ id: number; senha_hash: string }>(
-    'select id, senha_hash from usuarios where email = $1 and ativo',
+  // Busca independente de "ativo" para poder avisar quem está aguardando aprovação —
+  // mas só revela isso depois de confirmar a senha, para não vazar quem tem conta.
+  const usuario = await queryOne<{ id: number; senha_hash: string; ativo: boolean; pendente_aprovacao: boolean }>(
+    'select id, senha_hash, ativo, pendente_aprovacao from usuarios where email = $1',
     [email],
   )
   if (!usuario || !(await conferirSenha(senha, usuario.senha_hash))) return { erro: 'E-mail ou senha inválidos.' }
+  if (!usuario.ativo) {
+    return {
+      erro: usuario.pendente_aprovacao
+        ? 'Seu cadastro foi enviado e está aguardando aprovação de um administrador.'
+        : 'Sua conta está bloqueada. Fale com um administrador.',
+    }
+  }
   await query('update usuarios set ultimo_acesso = now() where id = $1', [usuario.id])
   await criarSessao(usuario.id)
   redirect('/')
+}
+
+export async function cadastrar(_: Resultado, form: FormData): Promise<Resultado> {
+  const nome = texto(form, 'nome')
+  const matricula = texto(form, 'matricula')
+  const email = texto(form, 'email')?.toLowerCase()
+  const senha = texto(form, 'senha')
+  if (!nome || !matricula || !email || !senha) return { erro: 'Preencha nome, matrícula, e-mail e senha.' }
+  if (senha.length < 8) return { erro: 'A senha precisa de pelo menos 8 caracteres.' }
+  try {
+    await garantirAdmin()
+    await query(
+      `insert into usuarios (nome, matricula, email, senha_hash, perfil, ativo, pendente_aprovacao)
+       values ($1, $2, $3, $4, 'consulta', false, true)`,
+      [nome, matricula, email, await hashSenha(senha)],
+    )
+  } catch (erro) {
+    return { erro: erroEmailDuplicado(erro) ? 'Já existe um cadastro com esse e-mail.' : 'Não foi possível enviar o cadastro. Tente novamente.' }
+  }
+  return { ok: true }
 }
 
 export async function sair() {
@@ -212,6 +246,7 @@ export async function salvarUsuario(_: Resultado, form: FormData): Promise<Resul
   const id = Number(texto(form, 'id') ?? 0)
   const email = texto(form, 'email')?.toLowerCase()
   const nome = texto(form, 'nome')
+  const matricula = texto(form, 'matricula')
   const perfil = texto(form, 'perfil') as Perfil | null
   const senha = texto(form, 'senha')
   const ativo = form.get('ativo') !== 'nao'
@@ -221,17 +256,34 @@ export async function salvarUsuario(_: Resultado, form: FormData): Promise<Resul
   if (senha && senha.length < 8) return { erro: 'A senha precisa de pelo menos 8 caracteres.' }
   try {
     if (id) {
-      await query('update usuarios set email=$1, nome=$2, perfil=$3, ativo=$4 where id=$5', [email, nome, perfil, ativo, id])
+      // Ativar aqui também encerra a pendência de aprovação (autocadastro).
+      await query(
+        'update usuarios set email=$1, nome=$2, matricula=$3, perfil=$4, ativo=$5, pendente_aprovacao = pendente_aprovacao and not $5 where id=$6',
+        [email, nome, matricula, perfil, ativo, id],
+      )
       if (senha) await query('update usuarios set senha_hash=$1 where id=$2', [await hashSenha(senha), id])
     } else {
       if (!senha) return { erro: 'Defina uma senha inicial.' }
-      await query('insert into usuarios (email, nome, perfil, senha_hash) values ($1,$2,$3,$4)', [email, nome, perfil, await hashSenha(senha)])
+      await query('insert into usuarios (email, nome, matricula, perfil, senha_hash) values ($1,$2,$3,$4,$5)', [email, nome, matricula, perfil, await hashSenha(senha)])
     }
-  } catch {
-    return { erro: 'Já existe um usuário com esse e-mail.' }
+  } catch (erro) {
+    return { erro: erroEmailDuplicado(erro) ? 'Já existe um usuário com esse e-mail.' : 'Não foi possível salvar. Tente novamente.' }
   }
   revalidatePath('/configuracoes')
   return { ok: true }
+}
+
+/** Aprovação rápida de um autocadastro (mantém o perfil "Consulta" definido no cadastro). */
+export async function aprovarUsuario(id: number) {
+  await exigirUsuario(pode.administrar)
+  await query('update usuarios set ativo = true, pendente_aprovacao = false where id = $1', [id])
+  revalidatePath('/configuracoes')
+}
+
+export async function recusarUsuario(id: number) {
+  await exigirUsuario(pode.administrar)
+  await query('delete from usuarios where id = $1 and pendente_aprovacao', [id])
+  revalidatePath('/configuracoes')
 }
 
 export async function alterarMinhaSenha(_: Resultado, form: FormData): Promise<Resultado> {

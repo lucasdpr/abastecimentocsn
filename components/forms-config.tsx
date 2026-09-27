@@ -43,7 +43,7 @@ export function FormParametros({ dias, recobranca }: { dias: number; recobranca:
   )
 }
 
-type Usuario = { id: number; nome: string; email: string; perfil: string; ativo: boolean }
+type Usuario = { id: number; nome: string; email: string; matricula: string | null; perfil: string; ativo: boolean }
 
 export function FormUsuario({ usuario }: { usuario?: Usuario }) {
   const [estado, acao, pendente] = useActionState(salvarUsuario, null)
@@ -51,6 +51,7 @@ export function FormUsuario({ usuario }: { usuario?: Usuario }) {
     <form action={acao} className="grid gap-2 sm:grid-cols-2">
       {usuario && <input type="hidden" name="id" value={usuario.id} />}
       <input className="input" name="nome" placeholder="Nome" defaultValue={usuario?.nome} required />
+      <input className="input" name="matricula" placeholder="Matrícula" defaultValue={usuario?.matricula ?? ''} />
       <input className="input" type="email" name="email" placeholder="E-mail" defaultValue={usuario?.email} required />
       <select className="input" name="perfil" defaultValue={usuario?.perfil ?? 'consulta'}>
         <option value="admin">Administrador</option>

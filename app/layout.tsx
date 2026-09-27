@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { RegistrarServiceWorker } from '@/components/registrar-sw'
+import { AtualizacaoApp } from '@/components/atualizacao-app'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="pt-BR">
       <body className="font-sans antialiased">
         {children}
-        <RegistrarServiceWorker />
+        <AtualizacaoApp />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

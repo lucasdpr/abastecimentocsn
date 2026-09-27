@@ -5,7 +5,12 @@ const ESTATICOS = ['/offline.html', '/icon-192.png', '/icon-512.png', '/favicon.
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSAO).then((cache) => cache.addAll(ESTATICOS)))
-  self.skipWaiting()
+  // Não ativa sozinho: fica "esperando" até o app pedir (botão "Atualizar"),
+  // para não trocar a versão em uso sem o usuário saber.
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.tipo === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {

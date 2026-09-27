@@ -104,8 +104,9 @@ export async function garantirAdmin() {
   if (!email || !senha) return
   const [{ total }] = await query<{ total: number }>('select count(*)::int as total from usuarios')
   if (total > 0) return
+  const matricula = process.env.ADMIN_MATRICULA?.trim() || null
   await query(
-    `insert into usuarios (email, nome, perfil, senha_hash) values ($1, 'Administrador', 'admin', $2) on conflict (email) do nothing`,
-    [email, await hashSenha(senha)],
+    `insert into usuarios (email, nome, matricula, perfil, senha_hash) values ($1, 'Administrador', $3, 'admin', $2) on conflict (email) do nothing`,
+    [email, await hashSenha(senha), matricula],
   )
 }
