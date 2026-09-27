@@ -13,3 +13,12 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+# Build
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Dados da CSN nunca vão para o repositório
+*.xlsx
+*.xltx
+*.xlsm
+*.csv

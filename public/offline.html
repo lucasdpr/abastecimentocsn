@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sem conexão · Central de Abastecimento</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f5f6f8; color: #0f172a; padding: 16px; box-sizing: border-box; }
+  @media (prefers-color-scheme: dark) { body { background: #0d0f12; color: #f1f5f9; } p { color: #8b95a3 !important; } }
+  main { text-align: center; max-width: 320px; }
+  img { width: 72px; height: 72px; border-radius: 18px; }
+  h1 { font-size: 18px; margin: 16px 0 4px; }
+  p { color: #64748b; font-size: 14px; margin: 0 0 20px; }
+  button { height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: #0b3a66; color: #fff; font: inherit; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icon-192.png" alt="">
+  <h1>Sem conexão</h1>
+  <p>Os dados da carteira só são exibidos online. Verifique a internet e tente de novo.</p>
+  <button onclick="location.reload()">Tentar de novo</button>
+</main>
+</body>
+</html>

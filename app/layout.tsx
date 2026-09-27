@@ -1,47 +1,39 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { RegistrarServiceWorker } from '@/components/registrar-sw'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'OMS Central | Dashboard de Abastecimento PL33',
-  description: 'Dashboard de gestão de abastecimento, compras, FUP e retirada de materiais da Oficina de Moldes e Segmentos PL33.',
-  generator: 'v0.app',
+  title: { default: 'Central de Abastecimento', template: '%s · Central de Abastecimento' },
+  description: 'Acompanhamento de ordens, follow-up, ativação e ANTECs da Central de Abastecimento de Manutenção.',
+  robots: { index: false, follow: false },
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
-    apple: '/apple-icon.png',
+    apple: '/apple-touch-icon.png',
   },
+  appleWebApp: { capable: true, title: 'Abastecimento', statusBarStyle: 'default' },
+  applicationName: 'Central de Abastecimento',
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f4f6f8' },
-    { media: '(prefers-color-scheme: dark)', color: '#020817' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#16191d' },
   ],
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased">
+      <body className="font-sans antialiased">
         {children}
+        <RegistrarServiceWorker />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
