@@ -2,21 +2,26 @@
 
 :root {
   color-scheme: light;
-  --bg: #f5f6f8;
+  --bg: #f3f5f8;
   --surface: #ffffff;
-  --surface-2: #f9fafb;
-  --ink: #0f172a;
-  --ink-2: #475569;
-  --muted: #64748b;
-  --line: #e5e7eb;
-  --line-strong: #cbd5e1;
+  --surface-2: #f7f9fb;
+  --surface-3: #eef1f5;
+  --ink: #0e1726;
+  --ink-2: #414e62;
+  --muted: #667387;
+  --line: #e3e7ed;
+  --line-strong: #cbd2dc;
   --brand: #0b3a66;
+  --brand-2: #124f8a;
   --brand-ink: #ffffff;
-  --brand-soft: #e8eff7;
+  --brand-soft: #e8f0f9;
   --accent: #2a78d6;
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
+  /* Cinzas de "contexto" nos gráficos (ênfase: uma cor, o resto em cinza). */
+  --deemph-1: #8e99aa;
+  --deemph-2: #c9d0da;
   --good: #0ca30c;
   --good-ink: #006300;
   --good-soft: #e7f6e7;
@@ -27,34 +32,42 @@
   --crit: #d03b3b;
   --crit-ink: #b42323;
   --crit-soft: #fdeceb;
-  --grid: #eef0f3;
+  --grid: #edf0f4;
+  --sombra: 0 1px 2px rgb(14 23 38 / 0.05), 0 1px 1px rgb(14 23 38 / 0.03);
+  --sombra-alta: 0 10px 30px -12px rgb(11 58 102 / 0.28), 0 2px 6px rgb(14 23 38 / 0.06);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme='light'])) {
     color-scheme: dark;
-    --bg: #0d0f12;
-    --surface: #16191d;
-    --surface-2: #1c2025;
-    --ink: #f1f5f9;
-    --ink-2: #c3cad4;
-    --muted: #8b95a3;
-    --line: #2a2f36;
-    --line-strong: #3a414a;
+    --bg: #0b0e13;
+    --surface: #131820;
+    --surface-2: #181e27;
+    --surface-3: #1e2530;
+    --ink: #eef2f7;
+    --ink-2: #c1c9d5;
+    --muted: #8a96a8;
+    --line: #232b36;
+    --line-strong: #323c49;
     --brand: #3987e5;
+    --brand-2: #5a9bea;
     --brand-ink: #ffffff;
-    --brand-soft: #16263a;
-    --accent: #3987e5;
+    --brand-soft: #142840;
+    --accent: #5b9ef0;
     --series-1: #3987e5;
     --series-2: #d95926;
     --series-3: #199e70;
+    --deemph-1: #6b788b;
+    --deemph-2: #435061;
     --good-ink: #3fcf3f;
-    --good-soft: #0f2a12;
+    --good-soft: #0f2a14;
     --warn-ink: #fab219;
     --warn-soft: #2e2410;
     --crit-ink: #f07272;
-    --crit-soft: #331616;
-    --grid: #22262c;
+    --crit-soft: #341719;
+    --grid: #1f2630;
+    --sombra: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.4);
+    --sombra-alta: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 16px 40px -16px rgb(0 0 0 / 0.7);
   }
 }
 
@@ -62,12 +75,14 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
   --color-brand-ink: var(--brand-ink);
   --color-brand-soft: var(--brand-soft);
   --color-accent: var(--accent);
@@ -80,7 +95,10 @@
   --color-crit: var(--crit);
   --color-crit-ink: var(--crit-ink);
   --color-crit-soft: var(--crit-soft);
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --shadow-card: var(--sombra);
+  --shadow-alta: var(--sombra-alta);
 }
 
 html,
@@ -92,44 +110,127 @@ body {
 }
 body {
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes brilho {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-surface;
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+  .card-link {
+    @apply transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-line-strong hover:shadow-alta active:translate-y-0;
   }
   .btn {
-    @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-sm font-medium text-ink shadow-card transition-[background-color,border-color,transform] duration-150 select-none hover:border-line-strong hover:bg-surface-2 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-primary {
-    @apply border-transparent bg-brand text-brand-ink hover:bg-brand hover:opacity-90;
+    @apply border-transparent bg-brand text-brand-ink hover:border-transparent hover:bg-brand-2;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent shadow-none hover:border-transparent hover:bg-surface-3;
   }
   .btn-sm {
-    @apply h-8 px-2.5 text-xs;
+    @apply h-8 rounded-lg px-2.5 text-xs;
   }
   .input {
-    @apply h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/20;
+    @apply h-10 w-full rounded-xl border border-line bg-surface px-3.5 text-sm text-ink shadow-card transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-muted hover:border-line-strong focus:border-accent focus:ring-4 focus:ring-accent/15;
   }
   textarea.input {
-    @apply h-auto py-2;
+    @apply h-auto py-2.5;
   }
   .label {
-    @apply mb-1 block text-xs font-medium text-ink-2;
+    @apply mb-1.5 block text-xs font-medium text-ink-2;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold tracking-[0.08em] text-muted uppercase;
   }
   .tabela {
-    @apply w-full border-collapse text-sm;
+    @apply w-full border-separate border-spacing-0 text-sm;
   }
   .tabela th {
-    @apply sticky top-0 z-10 border-b border-line bg-surface-2 px-3 py-2 text-left text-xs font-medium whitespace-nowrap text-muted;
+    @apply sticky top-0 z-10 border-b border-line bg-surface-2 px-4 py-2.5 text-left text-xs font-medium whitespace-nowrap text-muted;
   }
   .tabela td {
-    @apply border-b border-line px-3 py-2.5 align-top;
+    @apply border-b border-line px-4 py-3 align-top;
+  }
+  .tabela tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .tabela tbody tr {
+    @apply transition-colors;
   }
   .tabela tbody tr:hover td {
     @apply bg-surface-2;
   }
   .num {
     font-variant-numeric: tabular-nums;
+  }
+  .codigo {
+    @apply font-mono text-[13px] tracking-tight;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Só o topo da página anima: animar blocos muito altos (tabelas longas) pesa na placa de vídeo. */
+  .entrar > *:nth-child(-n + 3) {
+    animation: entrar 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .entrar > *:nth-child(2) {
+    animation-delay: 50ms;
+  }
+  .entrar > *:nth-child(3) {
+    animation-delay: 100ms;
+  }
+  .esqueleto {
+    @apply rounded-xl;
+    background: linear-gradient(90deg, var(--surface-3) 0%, var(--surface-2) 50%, var(--surface-3) 100%);
+    background-size: 200% 100%;
+    animation: brilho 1.4s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entrar > *,
+  .esqueleto {
+    animation: none;
   }
 }

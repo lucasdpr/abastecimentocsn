@@ -1,4 +1,6 @@
 import { Analytics } from '@vercel/analytics/next'
+import { GeistMono } from 'geist/font/mono'
+import { GeistSans } from 'geist/font/sans'
 import type { Metadata, Viewport } from 'next'
 import { AtualizacaoApp } from '@/components/atualizacao-app'
 import './globals.css'
@@ -27,14 +29,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#16191d' },
+    { media: '(prefers-color-scheme: light)', color: '#f3f5f8' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0e13' },
   ],
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="font-sans antialiased">
         {children}
         <AtualizacaoApp />

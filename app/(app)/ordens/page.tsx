@@ -57,7 +57,7 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                 <Link href={`/ordens/${o.ordem}`} className="card flex items-center gap-3 p-3.5 active:bg-surface-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="num font-semibold">{o.ordem}</span>
+                      <span className="codigo font-semibold">{o.ordem}</span>
                       <SeloSituacao situacao={o.situacao} />
                     </div>
                     <p className="mt-0.5 truncate text-sm text-ink-2">{o.texto_ordem ?? '—'}</p>
@@ -91,7 +91,7 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                 {linhas.map((o) => (
                   <tr key={o.ordem}>
                     <td>
-                      <Link href={`/ordens/${o.ordem}`} className="num font-medium text-accent hover:underline">
+                      <Link href={`/ordens/${o.ordem}`} className="codigo font-medium text-accent hover:underline">
                         {o.ordem}
                       </Link>
                     </td>
