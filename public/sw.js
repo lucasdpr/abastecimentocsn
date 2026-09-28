@@ -1,12 +1,13 @@
 // Service worker do app. Só guarda arquivos estáticos e a página offline:
 // dados da carteira NUNCA ficam em cache (são confidenciais e mudam a cada importação).
-const VERSAO = 'abast-v1'
+const VERSAO = 'abast-v2'
 const ESTATICOS = ['/offline.html', '/icon-192.png', '/icon-512.png', '/favicon.ico']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSAO).then((cache) => cache.addAll(ESTATICOS)))
-  // Não ativa sozinho: fica "esperando" até o app pedir (botão "Atualizar"),
-  // para não trocar a versão em uso sem o usuário saber.
+  // Ativa na hora: esperar o clique em "Atualizar" deixava apps instalados
+  // presos numa versão antiga (e com bugs) do service worker indefinidamente.
+  self.skipWaiting()
 })
 
 self.addEventListener('message', (event) => {
