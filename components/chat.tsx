@@ -93,7 +93,7 @@ export function Chat({ nome }: { nome: string }) {
               <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand"><Bot className="size-4" /></div>
               <div className="card min-w-0 max-w-[90%] px-4 py-3 text-sm leading-relaxed">
                 <Texto texto={m.content} />
-                {m.modo === 'direto' && <p className="mt-2 text-[11px] text-muted">Resposta direta do banco (IA generativa não configurada).</p>}
+                {m.modo === 'direto' && <p className="mt-2 text-[11px] text-muted">Consultei direto nos dados importados (sem modelo de IA generativa configurado).</p>}
               </div>
             </div>
           ),
