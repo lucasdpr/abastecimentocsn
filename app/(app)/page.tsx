@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { AlertTriangle, ArrowRight, BellRing, CalendarCheck, CalendarX2, CircleHelp, Clock, FileClock, Truck, Upload, XCircle } from 'lucide-react'
+import { TriangleAlert, ArrowRight, BellRing, CalendarCheck, CalendarX2, CircleQuestionMark, Clock, FileClock, Truck, Upload, CircleX } from 'lucide-react'
 import { GraficoRetornoSemanal } from '@/components/graficos'
 import { Barras, Cabecalho, Composicao, Kpi, Medidor, Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
@@ -15,8 +15,8 @@ const NOME_BASE: Record<string, string> = { ordens: 'Ordens', fup: 'Follow-up', 
 const FASE_SISTEMA: Record<string, string> = { ABER: 'Aberta', LIB: 'Liberada', ENTE: 'Encerrada tecnicamente', ENCE: 'Encerrada' }
 
 const PRAZOS: Record<number, { rotulo: string; cor: string; icone: typeof Clock }> = {
-  1: { rotulo: 'Vencida há mais de 90 dias', cor: 'var(--crit)', icone: AlertTriangle },
-  2: { rotulo: 'Vencida há 31 a 90 dias', cor: 'var(--serious)', icone: AlertTriangle },
+  1: { rotulo: 'Vencida há mais de 90 dias', cor: 'var(--crit)', icone: TriangleAlert },
+  2: { rotulo: 'Vencida há 31 a 90 dias', cor: 'var(--serious)', icone: TriangleAlert },
   3: { rotulo: 'Vencida há até 30 dias', cor: 'var(--warn)', icone: Clock },
   4: { rotulo: 'Vence nos próximos 30 dias', cor: 'var(--series-1)', icone: CalendarCheck },
   5: { rotulo: 'Vence em mais de 30 dias', cor: 'var(--deemph-1)', icone: CalendarCheck },
@@ -25,9 +25,9 @@ const PRAZOS: Record<number, { rotulo: string; cor: string; icone: typeof Clock 
 
 const APROVACAO: Record<string, { cor: string; icone?: typeof Clock }> = {
   Liberado: { cor: 'var(--series-1)' },
-  Rejeitado: { cor: 'var(--crit)', icone: XCircle },
+  Rejeitado: { cor: 'var(--crit)', icone: CircleX },
   'Em processo de aprovação': { cor: 'var(--warn)', icone: Clock },
-  'Sem status': { cor: 'var(--deemph-1)', icone: CircleHelp },
+  'Sem status': { cor: 'var(--deemph-1)', icone: CircleQuestionMark },
 }
 
 export default async function PaginaPainel() {

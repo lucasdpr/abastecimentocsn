@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { ArrowUp, Bot, Loader2 } from 'lucide-react'
+import { ArrowUp, Bot, LoaderCircle } from 'lucide-react'
 
 type Msg = { role: 'user' | 'assistant'; content: string; modo?: 'ia' | 'direto' }
 
@@ -99,7 +99,7 @@ export function Chat({ nome }: { nome: string }) {
           ),
         )}
         {pensando && (
-          <div className="flex items-center gap-2 pl-11 text-sm text-muted"><Loader2 className="size-4 animate-spin" /> Consultando…</div>
+          <div className="flex items-center gap-2 pl-11 text-sm text-muted"><LoaderCircle className="size-4 animate-spin" /> Consultando…</div>
         )}
         <div ref={fim} />
       </div>

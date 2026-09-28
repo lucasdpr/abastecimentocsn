@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AlertTriangle, ArrowUpRight, CheckCircle2, CircleDot, Clock, Inbox, Search, type LucideIcon } from 'lucide-react'
+import { TriangleAlert, ArrowUpRight, CircleCheckBig, CircleDot, Clock, Inbox, Search, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function Cabecalho({ titulo, descricao, acoes, sobre }: { titulo: string; descricao?: string; acoes?: React.ReactNode; sobre?: string }) {
@@ -25,7 +25,7 @@ const TONS: Record<Tom, string> = {
   info: 'bg-brand-soft text-accent',
 }
 
-const ICONES: Partial<Record<Tom, LucideIcon>> = { bom: CheckCircle2, alerta: Clock, critico: AlertTriangle, info: CircleDot }
+const ICONES: Partial<Record<Tom, LucideIcon>> = { bom: CircleCheckBig, alerta: Clock, critico: TriangleAlert, info: CircleDot }
 
 export function Selo({ tom = 'neutro', children, icone = true }: { tom?: Tom; children: React.ReactNode; icone?: boolean }) {
   const Icone = icone ? ICONES[tom] : undefined
@@ -54,7 +54,7 @@ export function Kpi({
   icone?: LucideIcon
   className?: string
 }) {
-  const IconeTom = tom === 'critico' ? AlertTriangle : tom === 'alerta' ? Clock : undefined
+  const IconeTom = tom === 'critico' ? TriangleAlert : tom === 'alerta' ? Clock : undefined
   const conteudo = (
     <>
       <div className="flex items-center justify-between gap-2">
