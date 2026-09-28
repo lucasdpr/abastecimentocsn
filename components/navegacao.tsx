@@ -69,7 +69,7 @@ export function Navegacao({
       ],
     },
   ]
-    .map((s) => ({ ...s, itens: s.itens.filter((i) => !i.perfis || i.perfis.includes(perfil)) }))
+    .map((s) => ({ ...s, itens: s.itens.filter((item) => !item.perfis || item.perfis.includes(perfil)) }))
     .filter((s) => s.itens.length)
   const itens = secoes.flatMap((s) => s.itens)
 
@@ -84,12 +84,13 @@ export function Navegacao({
         <div key={s.titulo}>
           <p className="eyebrow mb-1.5 px-3">{s.titulo}</p>
           <div className="flex flex-col gap-0.5">
-            {s.itens.map((i) => {
-              const atual = ativo(i.href)
+            {s.itens.map((item) => {
+              const atual = ativo(item.href)
+              const Icone = item.icone
               return (
                 <Link
-                  key={i.href}
-                  href={i.href}
+                  key={item.href}
+                  href={item.href}
                   aria-current={atual ? 'page' : undefined}
                   className={cn(
                     'relative flex h-9 items-center gap-3 rounded-lg px-3 text-[13.5px] font-medium transition-colors',
@@ -97,11 +98,11 @@ export function Navegacao({
                   )}
                 >
                   {atual && <span className="absolute top-2 bottom-2 -left-3 w-[3px] rounded-r-full bg-accent" aria-hidden />}
-                  <i.icone className={cn('size-4 shrink-0', atual ? 'text-accent' : 'text-muted')} aria-hidden />
-                  <span className="flex-1">{i.rotulo}</span>
-                  {!!i.selo && (
-                    <span className="num rounded-md bg-crit px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" aria-label={`${i.selo} alertas`}>
-                      {i.selo}
+                  <Icone className={cn('size-4 shrink-0', atual ? 'text-accent' : 'text-muted')} aria-hidden />
+                  <span className="flex-1">{item.rotulo}</span>
+                  {!!item.selo && (
+                    <span className="num rounded-md bg-crit px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" aria-label={`${item.selo} alertas`}>
+                      {item.selo}
                     </span>
                   )}
                 </Link>
@@ -180,19 +181,20 @@ export function Navegacao({
         style={{ gridTemplateColumns: `repeat(${inferior.length + 1}, minmax(0, 1fr))` }}
         aria-label="Atalhos"
       >
-        {inferior.map((i) => {
-          const atual = ativo(i.href)
+        {inferior.map((item) => {
+          const atual = ativo(item.href)
+          const Icone = item.icone
           return (
             <Link
-              key={i.href}
-              href={i.href}
+              key={item.href}
+              href={item.href}
               aria-current={atual ? 'page' : undefined}
               className={cn('relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors', atual ? 'text-accent' : 'text-muted')}
             >
               {atual && <span className="absolute top-0 h-[3px] w-8 rounded-b-full bg-accent" aria-hidden />}
-              <i.icone className="size-5" aria-hidden />
-              {i.rotulo === 'Assistente IA' ? 'IA' : i.rotulo}
-              {!!i.selo && <span className="num absolute top-2 left-1/2 ml-2 rounded-md bg-crit px-1.5 text-[10px] leading-4 font-semibold text-white">{i.selo}</span>}
+              <Icone className="size-5" aria-hidden />
+              {item.rotulo === 'Assistente IA' ? 'IA' : item.rotulo}
+              {!!item.selo && <span className="num absolute top-2 left-1/2 ml-2 rounded-md bg-crit px-1.5 text-[10px] leading-4 font-semibold text-white">{item.selo}</span>}
             </Link>
           )
         })}

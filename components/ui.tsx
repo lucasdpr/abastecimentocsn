@@ -125,34 +125,34 @@ export function Barras({
   formatar?: (v: number) => string
   cor?: string
 }) {
-  const max = Math.max(1, ...itens.map((i) => i.valor))
+  const max = Math.max(1, ...itens.map((item) => item.valor))
   if (!itens.length) return <Vazio texto="Sem dados ainda." />
   return (
     <ul className="space-y-3">
-      {itens.map((i) => {
-        const Icone = i.icone
+      {itens.map((item) => {
+        const Icone = item.icone
         const linha = (
           <>
             <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
               <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
                 {Icone && <Icone className="size-3.5 shrink-0" aria-hidden />}
-                <span className="truncate">{i.rotulo}</span>
+                <span className="truncate">{item.rotulo}</span>
               </span>
-              <span className="num shrink-0 font-medium text-ink">{formatar(i.valor)}</span>
+              <span className="num shrink-0 font-medium text-ink">{formatar(item.valor)}</span>
             </div>
             <div className="h-1.5 rounded-full" style={{ background: 'var(--grid)' }}>
               <div
                 className="h-1.5 rounded-full transition-[width] duration-500"
-                style={{ width: `${i.valor ? Math.max(1.5, (i.valor / max) * 100) : 0}%`, background: i.cor ?? cor }}
+                style={{ width: `${item.valor ? Math.max(1.5, (item.valor / max) * 100) : 0}%`, background: item.cor ?? cor }}
               />
             </div>
-            {i.detalhe && <div className="mt-1 text-[11px] text-muted">{i.detalhe}</div>}
+            {item.detalhe && <div className="mt-1 text-[11px] text-muted">{item.detalhe}</div>}
           </>
         )
         return (
-          <li key={i.rotulo} title={`${i.rotulo}: ${formatar(i.valor)}${i.detalhe ? ` · ${i.detalhe}` : ''}`}>
-            {i.href ? (
-              <Link href={i.href} className="-mx-2 block rounded-lg px-2 py-1 transition-colors hover:bg-surface-2">
+          <li key={item.rotulo} title={`${item.rotulo}: ${formatar(item.valor)}${item.detalhe ? ` · ${item.detalhe}` : ''}`}>
+            {item.href ? (
+              <Link href={item.href} className="-mx-2 block rounded-lg px-2 py-1 transition-colors hover:bg-surface-2">
                 {linha}
               </Link>
             ) : (
