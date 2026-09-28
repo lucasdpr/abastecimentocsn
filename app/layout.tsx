@@ -3,6 +3,10 @@ import type { Metadata, Viewport } from 'next'
 import { AtualizacaoApp } from '@/components/atualizacao-app'
 import './globals.css'
 
+// Dá mais tempo pro banco (Neon, plano grátis) acordar de uma hibernação antes
+// da Vercel matar a função — o padrão (10s) é curto demais para isso.
+export const maxDuration = 30
+
 export const metadata: Metadata = {
   title: { default: 'Central de Abastecimento', template: '%s · Central de Abastecimento' },
   description: 'Acompanhamento de ordens, follow-up, ativação e ANTECs da Central de Abastecimento de Manutenção.',

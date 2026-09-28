@@ -58,8 +58,16 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
 
   // Navegação: sempre rede; sem conexão mostra a página offline.
+  // Nunca devolve "nada" pro navegador — isso vira a tela genérica de erro
+  // do próprio navegador em vez da nossa página offline estilizada.
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/offline.html')))
+    event.respondWith(
+      fetch(request).catch(
+        async () =>
+          (await caches.match('/offline.html')) ||
+          new Response('<h1>Sem conexão</h1><p>Tente novamente.</p>', { headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      ),
+    )
     return
   }
 

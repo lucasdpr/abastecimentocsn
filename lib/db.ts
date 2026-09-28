@@ -36,19 +36,23 @@ function erroDeConexao(erro: unknown) {
   const mensagem = erro instanceof Error ? erro.message : String(erro)
   return (
     codigo === 'ECONNRESET' ||
+    codigo === 'ECONNREFUSED' || // compute ainda acordando, recusou a conexão nova
+    codigo === 'ETIMEDOUT' ||
     codigo === '57P01' || // admin_shutdown (Neon suspendendo o compute)
     codigo === 'XX000' ||
     /Connection terminated|connection reset|timeout expired/i.test(mensagem)
   )
 }
 
-/** Roda a consulta e, se a conexão tiver caído (banco hibernou), tenta de novo uma vez com um pool novo. */
+/** Roda a consulta e, se a conexão tiver caído (banco hibernou), tenta de novo — com um pool novo,
+ * dando um instante pro Neon terminar de acordar o compute antes da segunda tentativa. */
 async function executar<T extends QueryResultRow>(text: string, params: unknown[]) {
   try {
     return await pool().query<T>(text, params)
   } catch (erro) {
     if (!erroDeConexao(erro)) throw erro
     globalForPool.pgPool = undefined
+    await new Promise((resolver) => setTimeout(resolver, 300))
     return await pool().query<T>(text, params)
   }
 }
