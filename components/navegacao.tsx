@@ -31,7 +31,19 @@ function iniciais(nome: string) {
   return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes.at(-1)![0] : (partes[0]?.[1] ?? ''))).toUpperCase()
 }
 
-export function Navegacao({ nome, perfil, perfilRotulo, alertas }: { nome: string; perfil: string; perfilRotulo: string; alertas: number }) {
+export function Navegacao({
+  nome,
+  perfil,
+  perfilRotulo,
+  alertas,
+  pendentes,
+}: {
+  nome: string
+  perfil: string
+  perfilRotulo: string
+  alertas: number
+  pendentes: number
+}) {
   const caminho = usePathname()
   const [aberto, setAberto] = useState(false)
   useEffect(() => setAberto(false), [caminho])
@@ -53,7 +65,7 @@ export function Navegacao({ nome, perfil, perfilRotulo, alertas }: { nome: strin
       itens: [
         { href: '/assistente', rotulo: 'Assistente IA', icone: Bot },
         { href: '/importar', rotulo: 'Importar / Excel', icone: Upload, perfis: EDICAO },
-        { href: '/configuracoes', rotulo: 'Configurações', icone: Settings },
+        { href: '/configuracoes', rotulo: 'Configurações', icone: Settings, selo: pendentes },
       ],
     },
   ]
@@ -63,6 +75,8 @@ export function Navegacao({ nome, perfil, perfilRotulo, alertas }: { nome: strin
 
   const ativo = (href: string) => (href === '/' ? caminho === '/' : caminho.startsWith(href))
   const inferior = itens.filter((i) => ['/', '/ordens', '/alertas', '/assistente'].includes(i.href)).slice(0, 4)
+  // Selo de um item que só existe dentro do "Mais" (ex.: Configurações) precisa aparecer no próprio botão "Mais".
+  const seloForaDoInferior = itens.filter((i) => !inferior.includes(i)).some((i) => i.selo)
 
   const lista = (
     <nav className="flex flex-col gap-5" aria-label="Principal">
@@ -182,9 +196,10 @@ export function Navegacao({ nome, perfil, perfilRotulo, alertas }: { nome: strin
             </Link>
           )
         })}
-        <button className="flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted" onClick={() => setAberto(true)}>
+        <button className="relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted" onClick={() => setAberto(true)}>
           <Menu className="size-5" aria-hidden />
           Mais
+          {seloForaDoInferior && <span className="absolute top-2 left-1/2 ml-3 size-2 rounded-full bg-crit" aria-label="Tem pendência" />}
         </button>
       </nav>
     </>

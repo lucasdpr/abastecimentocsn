@@ -13,12 +13,19 @@ const SESSION_DAYS = 14
 export type Perfil = 'admin' | 'abastecimento' | 'gerencia' | 'consulta'
 export type Usuario = { id: number; email: string; matricula: string | null; nome: string; perfil: Perfil }
 
+// Nomes exibidos na interface. O valor salvo no banco (chave) não muda — só o rótulo.
+// admin: acesso total e só quem administra escolhe outros administradores.
+// abastecimento: edita. gerencia (rótulo "Visualizador"): vê tudo, sem editar.
+// consulta (rótulo "Técnico"): só Ordens e Assistente IA.
 export const PERFIS: Record<Perfil, string> = {
   admin: 'Administrador',
   abastecimento: 'Abastecimento',
-  gerencia: 'Gerência',
-  consulta: 'Consulta',
+  gerencia: 'Visualizador',
+  consulta: 'Técnico',
 }
+
+/** Perfis que uma pessoa pode pedir no autocadastro (nunca Administrador, por segurança). */
+export const PERFIS_AUTOCADASTRO: Perfil[] = ['abastecimento', 'gerencia', 'consulta']
 
 export const pode = {
   editar: (u: Usuario) => u.perfil === 'admin' || u.perfil === 'abastecimento',

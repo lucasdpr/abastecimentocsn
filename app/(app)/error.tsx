@@ -2,14 +2,15 @@
 
 import { useEffect } from 'react'
 
-// Depois de uma publicação nova, um app aberto há horas ainda pede arquivos da
-// versão antiga, que não existem mais no servidor. Recarregar resolve.
-const VERSAO_ANTIGA = /ChunkLoadError|Loading (CSS )?chunk|dynamically imported module|Importing a module script failed|Failed to fetch/i
-
 export default function Erro({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error(error)
-    if (!VERSAO_ANTIGA.test(`${error.name} ${error.message}`)) return
+    // Erros sem "digest" nunca vêm do nosso código no servidor (que sempre trata
+    // seus próprios erros com try/catch) — só sobram bugs reais e, o mais comum,
+    // JS de uma versão antiga do app (aberto há horas) chocando com a versão
+    // nova publicada no meio do caminho. Recarregar resolve os dois: no bug
+    // real o usuário vê o erro de novo; na versão antiga, resolve na hora.
+    if (error.digest) return
     try {
       // No máximo uma recarga por minuto, para nunca entrar em loop.
       if (Date.now() - Number(sessionStorage.getItem('recarregou-versao') ?? 0) < 60_000) return

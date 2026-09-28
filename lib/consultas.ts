@@ -397,3 +397,8 @@ export async function contarAlertas() {
   )
   return r?.total ?? 0
 }
+
+export async function contarPendentes() {
+  const r = await queryOne<{ total: number }>('select count(*)::int as total from usuarios where pendente_aprovacao')
+  return r?.total ?? 0
+}

@@ -15,6 +15,7 @@ type LinhaUsuario = {
   email: string
   matricula: string | null
   perfil: Perfil
+  perfil_solicitado: Perfil | null
   ativo: boolean
   pendente_aprovacao: boolean
   ultimo_acesso: string | null
@@ -27,7 +28,7 @@ export default async function PaginaConfiguracoes() {
     configuracoes(),
     admin
       ? query<LinhaUsuario>(
-          'select id, nome, email, matricula, perfil, ativo, pendente_aprovacao, ultimo_acesso from usuarios order by pendente_aprovacao desc, ativo desc, nome',
+          'select id, nome, email, matricula, perfil, perfil_solicitado, ativo, pendente_aprovacao, ultimo_acesso from usuarios order by pendente_aprovacao desc, ativo desc, nome',
         )
       : Promise.resolve([]),
   ])
@@ -54,7 +55,7 @@ export default async function PaginaConfiguracoes() {
         {admin && (
           <div className="min-w-0 space-y-4 lg:col-span-2">
             {pendentes.length > 0 && (
-              <Painel titulo="Cadastros aguardando aprovação" descricao="Vieram do autocadastro; entram como Consulta." acao={<Selo tom="alerta">{pendentes.length}</Selo>}>
+              <Painel titulo="Cadastros aguardando aprovação" descricao="Ao aprovar, a pessoa entra com o cargo que pediu." acao={<Selo tom="alerta">{pendentes.length}</Selo>}>
                 <ul className="divide-y divide-line">
                   {pendentes.map((u) => (
                     <li key={u.id} className="flex items-center justify-between gap-3 py-3">
@@ -62,6 +63,11 @@ export default async function PaginaConfiguracoes() {
                         <div className="text-sm font-medium">{u.nome}</div>
                         <div className="truncate text-xs text-muted">
                           Matrícula {u.matricula ?? '—'} · {u.email}
+                        </div>
+                        <div className="mt-1">
+                          <Selo tom="info" icone={false}>
+                            Pediu: {PERFIS[u.perfil_solicitado ?? 'consulta']}
+                          </Selo>
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1.5">
@@ -78,7 +84,7 @@ export default async function PaginaConfiguracoes() {
               </Painel>
             )}
 
-            <Painel titulo="Usuários" descricao="Gerência visualiza; Abastecimento edita; Consulta vê ordens e usa a IA.">
+            <Painel titulo="Usuários" descricao="Visualizador vê tudo sem editar; Abastecimento edita; Técnico consulta ordens e usa a IA.">
               <details className="mb-4 rounded-lg border border-line">
                 <summary className="cursor-pointer p-3 text-sm font-medium">+ Novo usuário</summary>
                 <div className="border-t border-line p-3"><FormUsuario /></div>

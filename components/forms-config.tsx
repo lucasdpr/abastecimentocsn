@@ -63,10 +63,10 @@ export function FormUsuario({ usuario }: { usuario?: Usuario }) {
       />
       <input className="input" type="email" name="email" placeholder="E-mail" defaultValue={usuario?.email} required />
       <select className="input" name="perfil" defaultValue={usuario?.perfil ?? 'consulta'}>
-        <option value="admin">Administrador</option>
+        <option value="admin">Administrador (tudo + escolhe outros admins)</option>
         <option value="abastecimento">Abastecimento (edita)</option>
-        <option value="gerencia">Gerência (visualiza tudo)</option>
-        <option value="consulta">Consulta (ordens + IA)</option>
+        <option value="gerencia">Visualizador (vê tudo, sem editar)</option>
+        <option value="consulta">Técnico (ordens + IA)</option>
       </select>
       <input className="input" type="password" name="senha" placeholder={usuario ? 'Nova senha (opcional)' : 'Senha inicial (mín. 8)'} autoComplete="new-password" />
       {usuario && (
