@@ -267,6 +267,16 @@ select
   coalesce(sum(i.qtd * i.preco_medio) filter (where not i.item_eliminado), 0) as valor,
   min(i.data_necessidade) filter (where not i.item_eliminado and coalesce(i.status_item, 'ABERTO') in ('ABERTO', 'PENDENTE', 'PARCIAL')) as necessidade_mais_antiga,
   max(i.ultima_mudanca_em) as ultima_mudanca_em,
-  min(i.primeira_vez_em) as primeira_vez_em
+  min(i.primeira_vez_em) as primeira_vez_em,
+  -- Valor só dos itens ainda pendentes (o "valor" acima inclui os já retirados).
+  coalesce(sum(i.qtd * i.preco_medio) filter (where not i.item_eliminado and coalesce(i.status_item, 'ABERTO') in ('ABERTO', 'PENDENTE', 'PARCIAL')), 0) as valor_aberto
 from i
 group by i.ordem;
+
+-- Cópia pré-calculada da visão acima, usada pelas telas: agregar 60 mil itens a
+-- cada página pesa no banco. É recalculada ao concluir cada importação de ordens
+-- (única coisa que altera ordem_itens). Se a visão "ordens" ganhar colunas, rode
+-- "drop materialized view ordens_resumo" antes do db:setup para recriá-la.
+create materialized view if not exists ordens_resumo as select * from ordens;
+-- O índice único permite "refresh materialized view concurrently" (sem bloquear leituras).
+create unique index if not exists ordens_resumo_ordem_idx on ordens_resumo (ordem);

@@ -133,10 +133,13 @@ async function ferramentaMaterial(texto: string) {
 async function ferramentaResumo() {
   const p = await painel()
   return {
-    ordens_em_aberto: p.ordensResumo?.abertas,
-    itens_pendentes: p.ordensResumo?.itens_abertos,
-    ordens_paradas_para_cobrar: p.ordensResumo?.paradas,
-    ordens_com_necessidade_vencida: p.ordensResumo?.vencidas,
+    ordens_em_aberto: p.resumo.abertas,
+    ordens_total: p.resumo.total,
+    itens_pendentes: p.resumo.itens_abertos,
+    valor_itens_pendentes: moeda(p.resumo.valor_aberto),
+    ordens_paradas_para_cobrar: p.resumo.paradas,
+    ordens_com_necessidade_vencida: p.resumo.vencidas,
+    ordens_abertas_por_fase_sap: p.fases.map((f) => `${f.fase_sistema ?? '—'}/${f.fase_usuario ?? '—'}: ${f.ordens} ordens, ${moeda(f.valor_aberto)}`),
     dias_para_alerta: p.cfg.diasSemMovimentacao,
     fup_carteira_total: moeda(p.fupResumo?.total),
     fup_com_retorno: moeda(p.fupResumo?.com_retorno),
@@ -324,7 +327,7 @@ export async function modoDireto(pergunta: string): Promise<string> {
     const r = await ferramentaResumo()
     return [
       '**Resumo da carteira**',
-      `- Ordens em aberto: **${numero(r.ordens_em_aberto)}** (${numero(r.itens_pendentes)} itens)`,
+      `- Ordens em aberto: **${numero(r.ordens_em_aberto)}** de ${numero(r.ordens_total)} (${numero(r.itens_pendentes)} itens, ${r.valor_itens_pendentes})`,
       `- Paradas para cobrar: **${numero(r.ordens_paradas_para_cobrar)}**`,
       `- Necessidade vencida: ${numero(r.ordens_com_necessidade_vencida)}`,
       `- FUP: ${r.fup_carteira_total} em carteira, ${r.fup_com_retorno} com retorno · ${numero(r.fup_itens_em_atraso)} itens em atraso`,

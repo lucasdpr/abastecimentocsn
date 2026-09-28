@@ -41,7 +41,7 @@ export async function dadosExportacao(baseId: BaseId) {
                 a.cobrancas as app_cobrancas, a.ultima_cobranca_em as app_ultima_cobranca,
                 (current_date - o.ultima_mudanca_em::date) as app_dias_parada
            from ordem_itens i
-           join ordens o on o.ordem = i.ordem
+           join ordens_resumo o on o.ordem = i.ordem
            left join ordem_acompanhamento a on a.ordem = i.ordem
           where i.removido_em is null order by i.ordem, i.reserva, i.item`,
       )

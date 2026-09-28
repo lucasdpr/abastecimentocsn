@@ -223,6 +223,9 @@ export async function concluirImportacao(importacaoId: number, carteiraCompleta:
       )
     }
   }
+  if (base.id === 'ordens') {
+    await query('refresh materialized view concurrently ordens_resumo')
+  }
   return queryOne(
     `update importacoes set status = 'concluida', concluido_em = now(), removidas = $2 where id = $1
      returning id, base, linhas, novas, alteradas, removidas`,

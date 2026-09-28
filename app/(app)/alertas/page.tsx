@@ -85,7 +85,7 @@ export default async function PaginaAlertas() {
               {a.cancelaveis.map((f) => (
                 <li key={f.po_item} className="py-3 text-sm">
                   <div className="flex justify-between gap-3">
-                    <span className="num font-semibold">PO {f.po}/{f.item_po}</span>
+                    <span className="codigo font-semibold">PO {f.po}/{f.item_po}</span>
                     <span className="num font-medium">{moedaCurta(f.valor)}</span>
                   </div>
                   <div className="truncate text-ink-2">{f.descricao}</div>

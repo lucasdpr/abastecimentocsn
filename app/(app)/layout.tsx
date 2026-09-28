@@ -8,7 +8,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   return (
     <div className="min-h-dvh">
       <Navegacao nome={usuario.nome} perfil={usuario.perfil} perfilRotulo={PERFIS[usuario.perfil]} alertas={alertas} />
-      <main className="mx-auto w-full max-w-[1400px] px-4 pt-5 pb-28 md:px-6 lg:pb-10 lg:pl-66">{children}</main>
+      <main className="entrar mx-auto w-full max-w-[1440px] px-4 pt-6 pb-28 md:px-8 lg:pt-8 lg:pb-12 lg:pl-72">{children}</main>
     </div>
   )
 }

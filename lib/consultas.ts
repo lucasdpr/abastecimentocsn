@@ -46,30 +46,77 @@ export type OrdemResumo = {
 
 const ORDEM_SELECT = `select o.*, (current_date - o.ultima_mudanca_em::date)::int as dias_parada,
   a.situacao, a.setor_responsavel, a.cobrancas, a.ultima_cobranca_em, a.observacao
-  from ordens o left join ordem_acompanhamento a on a.ordem = o.ordem`
+  from ordens_resumo o left join ordem_acompanhamento a on a.ordem = o.ordem`
+
+/** Fase da ordem no SAP = primeiro código do status (sistema: ABER/LIB/ENTE/ENCE; usuário: PLAN/EXCT/…). */
+const FASE_SISTEMA_SQL = `nullif(split_part(coalesce(o.status_sistema, ''), ' ', 1), '')`
+const FASE_USUARIO_SQL = `nullif(split_part(coalesce(o.status_usuario, ''), ' ', 1), '')`
 
 export async function painel() {
   const cfg = await configuracoes()
-  const [ordensResumo, faixas, fupResumo, fupSemanas, fupResponsavel, antecs, importacoes, grupos] = await Promise.all([
-    queryOne<{ abertas: number; itens_abertos: number; paradas: number; vencidas: number; valor_aberto: string; total: number }>(
-      `select count(*) filter (where o.itens_abertos > 0)::int as abertas,
+  const [resumo, fases, prazos, grupos, maiores, aprovacao, fupResumo, fupSemanas, fupResponsavel, antecs, importacoes] = await Promise.all([
+    queryOne<{
+      total: number
+      abertas: number
+      itens: number
+      itens_abertos: number
+      itens_retirados: number
+      itens_eliminados: number
+      valor_aberto: string
+      paradas: number
+      vencidas: number
+      valor_vencido: string
+    }>(
+      `select count(*)::int as total,
+              count(*) filter (where o.itens_abertos > 0)::int as abertas,
+              coalesce(sum(o.itens), 0)::int as itens,
               coalesce(sum(o.itens_abertos), 0)::int as itens_abertos,
+              coalesce(sum(o.itens_retirados), 0)::int as itens_retirados,
+              coalesce(sum(o.itens_eliminados), 0)::int as itens_eliminados,
+              coalesce(sum(o.valor_aberto), 0) as valor_aberto,
               count(*) filter (where ${ORDEM_PARADA_SQL})::int as paradas,
               count(*) filter (where o.itens_abertos > 0 and o.necessidade_mais_antiga < current_date)::int as vencidas,
-              coalesce(sum(o.valor) filter (where o.itens_abertos > 0), 0) as valor_aberto,
-              count(*)::int as total
-         from ordens o left join ordem_acompanhamento a on a.ordem = o.ordem`,
+              coalesce(sum(o.valor_aberto) filter (where o.itens_abertos > 0 and o.necessidade_mais_antiga < current_date), 0) as valor_vencido
+         from ordens_resumo o left join ordem_acompanhamento a on a.ordem = o.ordem`,
       [cfg.diasSemMovimentacao, cfg.diasRecobranca],
     ),
-    query<{ faixa: string; ordens: number }>(
-      `select faixa, count(*)::int as ordens from (
-         select case
-           when current_date - o.ultima_mudanca_em::date < 15 then '0–14 dias'
-           when current_date - o.ultima_mudanca_em::date < 30 then '15–29 dias'
-           when current_date - o.ultima_mudanca_em::date < 60 then '30–59 dias'
-           else '60+ dias' end as faixa
-         from ordens o where o.itens_abertos > 0) x
-       group by faixa order by faixa`,
+    query<{ fase_sistema: string | null; fase_usuario: string | null; ordens: number; itens_abertos: number; valor_aberto: string; vencidas: number }>(
+      `select ${FASE_SISTEMA_SQL} as fase_sistema, ${FASE_USUARIO_SQL} as fase_usuario,
+              count(*)::int as ordens, sum(o.itens_abertos)::int as itens_abertos, sum(o.valor_aberto) as valor_aberto,
+              count(*) filter (where o.necessidade_mais_antiga < current_date)::int as vencidas
+         from ordens_resumo o where o.itens_abertos > 0
+        group by 1, 2 order by sum(o.valor_aberto) desc nulls last`,
+    ),
+    query<{ faixa: number; ordens: number; itens_abertos: number; valor_aberto: string }>(
+      `select case
+                when o.necessidade_mais_antiga is null then 6
+                when o.necessidade_mais_antiga < current_date - 90 then 1
+                when o.necessidade_mais_antiga < current_date - 30 then 2
+                when o.necessidade_mais_antiga < current_date then 3
+                when o.necessidade_mais_antiga <= current_date + 30 then 4
+                else 5 end as faixa,
+              count(*)::int as ordens, sum(o.itens_abertos)::int as itens_abertos, sum(o.valor_aberto) as valor_aberto
+         from ordens_resumo o where o.itens_abertos > 0 group by 1 order by 1`,
+    ),
+    query<{ grupo: string; abertas: number; itens_abertos: number; valor_aberto: string; vencidas: number; paradas: number }>(
+      `select coalesce(o.grp_planejamento, '—') as grupo,
+              count(*)::int as abertas, sum(o.itens_abertos)::int as itens_abertos, sum(o.valor_aberto) as valor_aberto,
+              count(*) filter (where o.necessidade_mais_antiga < current_date)::int as vencidas,
+              count(*) filter (where ${ORDEM_PARADA_SQL})::int as paradas
+         from ordens_resumo o left join ordem_acompanhamento a on a.ordem = o.ordem
+        where o.itens_abertos > 0 group by 1 order by 4 desc nulls last`,
+      [cfg.diasSemMovimentacao, cfg.diasRecobranca],
+    ),
+    query<{ ordem: string; texto_ordem: string | null; grp_planejamento: string | null; fase_sistema: string | null; fase_usuario: string | null; itens_abertos: number; valor_aberto: string; necessidade_mais_antiga: string | null; vencida: boolean }>(
+      `select o.ordem, o.texto_ordem, o.grp_planejamento, ${FASE_SISTEMA_SQL} as fase_sistema, ${FASE_USUARIO_SQL} as fase_usuario,
+              o.itens_abertos, o.valor_aberto, o.necessidade_mais_antiga, coalesce(o.necessidade_mais_antiga < current_date, false) as vencida
+         from ordens_resumo o where o.itens_abertos > 0 order by o.valor_aberto desc nulls last limit 8`,
+    ),
+    query<{ aprovacao: string; itens: number; valor: string }>(
+      `select coalesce(nullif(status_aprovacao, ''), 'Sem status') as aprovacao, count(*)::int as itens, coalesce(sum(qtd * preco_medio), 0) as valor
+         from ordem_itens
+        where removido_em is null and not eliminado and coalesce(status_item, 'ABERTO') in ('ABERTO', 'PENDENTE', 'PARCIAL')
+        group by 1 order by 2 desc`,
     ),
     queryOne<{ total: string; com_retorno: string; itens: number; atraso: number; valor_atraso: string; eleg_cancelamento: number }>(
       `select coalesce(sum(valor), 0) as total,
@@ -96,12 +143,8 @@ export async function painel() {
       `select distinct on (base) base, concluido_em, linhas from importacoes
         where status = 'concluida' order by base, concluido_em desc`,
     ),
-    query<{ grupo: string; abertas: number }>(
-      `select coalesce(grp_planejamento, '—') as grupo, count(*)::int as abertas
-         from ordens where itens_abertos > 0 group by 1 order by 2 desc limit 8`,
-    ),
   ])
-  return { cfg, ordensResumo, faixas, fupResumo, fupSemanas, fupResponsavel, antecs, importacoes, grupos }
+  return { cfg, resumo: resumo!, fases, prazos, grupos, maiores, aprovacao, fupResumo: fupResumo!, fupSemanas, fupResponsavel, antecs, importacoes }
 }
 
 export type FiltroOrdens = { busca?: string; filtro?: string; grupo?: string; pagina?: number }
@@ -135,7 +178,7 @@ export async function listarOrdens({ busca, filtro, grupo, pagina = 1 }: FiltroO
       params,
     ),
     queryOne<{ total: number }>(
-      `select count(*)::int as total from ordens o left join ordem_acompanhamento a on a.ordem = o.ordem ${sqlWhere}`,
+      `select count(*)::int as total from ordens_resumo o left join ordem_acompanhamento a on a.ordem = o.ordem ${sqlWhere}`,
       params,
     ),
   ])
@@ -349,7 +392,7 @@ export async function alertas() {
 export async function contarAlertas() {
   const cfg = await configuracoes()
   const r = await queryOne<{ total: number }>(
-    `select count(*)::int as total from ordens o left join ordem_acompanhamento a on a.ordem = o.ordem where ${ORDEM_PARADA_SQL}`,
+    `select count(*)::int as total from ordens_resumo o left join ordem_acompanhamento a on a.ordem = o.ordem where ${ORDEM_PARADA_SQL}`,
     [cfg.diasSemMovimentacao, cfg.diasRecobranca],
   )
   return r?.total ?? 0
