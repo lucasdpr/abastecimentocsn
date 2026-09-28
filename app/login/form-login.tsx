@@ -10,14 +10,13 @@ export function FormLogin() {
       <div>
         <label className="label" htmlFor="matricula">Matrícula</label>
         <input
-          className="input h-11 uppercase placeholder:normal-case"
+          className="input h-11 uppercase"
           id="matricula"
           name="matricula"
           autoComplete="username"
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          placeholder="Ex.: CBK3574"
           required
           autoFocus
         />
