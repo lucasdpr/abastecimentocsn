@@ -44,7 +44,9 @@ export function Chat({ nome }: { nome: string }) {
   const [entrada, setEntrada] = useState('')
   const [pensando, setPensando] = useState(false)
   const fim = useRef<HTMLDivElement>(null)
-  useEffect(() => fim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), [mensagens, pensando])
+  useEffect(() => {
+    fim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [mensagens, pensando])
 
   async function enviar(texto: string) {
     const pergunta = texto.trim()

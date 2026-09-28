@@ -3,10 +3,6 @@ const nextConfig = {
   // exceljs roda no servidor (exportação); não precisa ser empacotado.
   serverExternalPackages: ['exceljs'],
   poweredByHeader: false,
-  // Temporário: liga o mapa-fonte em produção pra investigar um erro que só
-  // acontece lá (o console do navegador aí mostra nomes reais, não minificados).
-  // Remover depois de identificar a causa — aumenta um pouco o tamanho do build.
-  productionBrowserSourceMaps: true,
   async headers() {
     return [
       {
