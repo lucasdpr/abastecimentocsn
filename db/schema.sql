@@ -12,11 +12,14 @@ create table if not exists usuarios (
   pendente_aprovacao boolean not null default false,
   -- Identificador do login (em vez de e-mail). Sempre gravada em maiúsculas.
   matricula text unique,
+  -- Cargo pedido no autocadastro; some quando aprovado (perfil já reflete a escolha).
+  perfil_solicitado text,
   criado_em timestamptz not null default now(),
   ultimo_acesso timestamptz
 );
 alter table usuarios add column if not exists pendente_aprovacao boolean not null default false;
 alter table usuarios add column if not exists matricula text;
+alter table usuarios add column if not exists perfil_solicitado text;
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'usuarios_matricula_key') then
     alter table usuarios add constraint usuarios_matricula_key unique (matricula);

@@ -10,6 +10,7 @@ import {
   garantirAdmin,
   hashSenha,
   pode,
+  PERFIS_AUTOCADASTRO,
   type Perfil,
 } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
@@ -72,14 +73,16 @@ export async function cadastrar(_: Resultado, form: FormData): Promise<Resultado
   const matricula = texto(form, 'matricula')?.toUpperCase()
   const email = texto(form, 'email')?.toLowerCase()
   const senha = texto(form, 'senha')
+  const perfilSolicitado = texto(form, 'perfil') as Perfil | null
   if (!nome || !matricula || !email || !senha) return { erro: 'Preencha nome, matrícula, e-mail e senha.' }
   if (senha.length < 8) return { erro: 'A senha precisa de pelo menos 8 caracteres.' }
+  if (!perfilSolicitado || !PERFIS_AUTOCADASTRO.includes(perfilSolicitado)) return { erro: 'Escolha o cargo.' }
   try {
     await garantirAdmin()
     await query(
-      `insert into usuarios (nome, matricula, email, senha_hash, perfil, ativo, pendente_aprovacao)
-       values ($1, $2, $3, $4, 'consulta', false, true)`,
-      [nome, matricula, email, await hashSenha(senha)],
+      `insert into usuarios (nome, matricula, email, senha_hash, perfil, perfil_solicitado, ativo, pendente_aprovacao)
+       values ($1, $2, $3, $4, 'consulta', $5, false, true)`,
+      [nome, matricula, email, await hashSenha(senha), perfilSolicitado],
     )
   } catch (erro) {
     return {
@@ -283,10 +286,15 @@ export async function salvarUsuario(_: Resultado, form: FormData): Promise<Resul
   return { ok: true }
 }
 
-/** Aprovação rápida de um autocadastro (mantém o perfil "Consulta" definido no cadastro). */
+/** Aprovação rápida de um autocadastro: aplica o cargo que a pessoa pediu. */
 export async function aprovarUsuario(id: number) {
   await exigirUsuario(pode.administrar)
-  await query('update usuarios set ativo = true, pendente_aprovacao = false where id = $1', [id])
+  await query(
+    `update usuarios set ativo = true, pendente_aprovacao = false,
+       perfil = coalesce(perfil_solicitado, perfil), perfil_solicitado = null
+     where id = $1`,
+    [id],
+  )
   revalidatePath('/configuracoes')
 }
 
