@@ -11,7 +11,7 @@ const COOKIE = 'abast_sessao'
 const SESSION_DAYS = 14
 
 export type Perfil = 'admin' | 'abastecimento' | 'gerencia' | 'consulta'
-export type Usuario = { id: number; email: string; nome: string; perfil: Perfil }
+export type Usuario = { id: number; email: string; matricula: string | null; nome: string; perfil: Perfil }
 
 export const PERFIS: Record<Perfil, string> = {
   admin: 'Administrador',
@@ -87,7 +87,7 @@ export const usuarioAtual = cache(async (): Promise<Usuario | null> => {
   const store = await cookies()
   const uid = lerToken(store.get(COOKIE)?.value)
   if (!uid) return null
-  return queryOne<Usuario>('select id, email, nome, perfil from usuarios where id = $1 and ativo', [uid])
+  return queryOne<Usuario>('select id, email, matricula, nome, perfil from usuarios where id = $1 and ativo', [uid])
 })
 
 export async function exigirUsuario(regra?: (u: Usuario) => boolean) {
@@ -97,16 +97,17 @@ export async function exigirUsuario(regra?: (u: Usuario) => boolean) {
   return usuario
 }
 
-/** Cria o primeiro administrador a partir de ADMIN_EMAIL/ADMIN_PASSWORD quando não há usuários. */
+/** Cria o primeiro administrador a partir de ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_MATRICULA quando não há usuários. */
 export async function garantirAdmin() {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase()
   const senha = process.env.ADMIN_PASSWORD
-  if (!email || !senha) return
+  const matricula = process.env.ADMIN_MATRICULA?.trim().toUpperCase()
+  if (!email || !senha || !matricula) return
   const [{ total }] = await query<{ total: number }>('select count(*)::int as total from usuarios')
   if (total > 0) return
-  const matricula = process.env.ADMIN_MATRICULA?.trim() || null
   await query(
-    `insert into usuarios (email, nome, matricula, perfil, senha_hash) values ($1, 'Administrador', $3, 'admin', $2) on conflict (email) do nothing`,
+    `insert into usuarios (email, nome, matricula, perfil, senha_hash) values ($1, 'Administrador', $3, 'admin', $2)
+     on conflict (email) do nothing`,
     [email, await hashSenha(senha), matricula],
   )
 }

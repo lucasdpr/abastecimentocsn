@@ -10,12 +10,29 @@ create table if not exists usuarios (
   ativo boolean not null default true,
   -- true = veio do autocadastro e ainda não foi aprovado por um administrador.
   pendente_aprovacao boolean not null default false,
-  matricula text,
+  -- Identificador do login (em vez de e-mail). Sempre gravada em maiúsculas.
+  matricula text unique,
   criado_em timestamptz not null default now(),
   ultimo_acesso timestamptz
 );
 alter table usuarios add column if not exists pendente_aprovacao boolean not null default false;
 alter table usuarios add column if not exists matricula text;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'usuarios_matricula_key') then
+    alter table usuarios add constraint usuarios_matricula_key unique (matricula);
+  end if;
+end $$;
+
+-- Inscrições de notificação push (Web Push) por usuário/dispositivo.
+create table if not exists push_inscricoes (
+  id serial primary key,
+  usuario_id int not null references usuarios(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  criado_em timestamptz not null default now()
+);
+create index if not exists push_inscricoes_usuario_idx on push_inscricoes (usuario_id);
 
 create table if not exists configuracoes (
   chave text primary key,

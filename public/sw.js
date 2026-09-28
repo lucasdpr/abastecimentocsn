@@ -13,6 +13,37 @@ self.addEventListener('message', (event) => {
   if (event.data?.tipo === 'SKIP_WAITING') self.skipWaiting()
 })
 
+self.addEventListener('push', (event) => {
+  let dados = { titulo: 'Central de Abastecimento', corpo: 'Você tem uma notificação nova.' }
+  try {
+    if (event.data) dados = { ...dados, ...event.data.json() }
+  } catch {
+    if (event.data) dados.corpo = event.data.text()
+  }
+  event.waitUntil(
+    self.registration.showNotification(dados.titulo, {
+      body: dados.corpo,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: dados.url || '/' },
+      tag: dados.tag,
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = event.notification.data?.url || '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((lista) => {
+      for (const cliente of lista) {
+        if (new URL(cliente.url).pathname === url && 'focus' in cliente) return cliente.focus()
+      }
+      return self.clients.openWindow(url)
+    }),
+  )
+})
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((chaves) => Promise.all(chaves.filter((c) => c !== VERSAO).map((c) => caches.delete(c)))),

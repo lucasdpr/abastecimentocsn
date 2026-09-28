@@ -13,11 +13,12 @@ import {
   type Perfil,
 } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { enviarPushPerfis, enviarPushUsuario } from '@/lib/push'
 
 export type Resultado = { ok?: boolean; erro?: string } | null
 
-/** Código de e-mail já cadastrado (unique_violation do Postgres) vs. qualquer outro erro de banco. */
-function erroEmailDuplicado(erro: unknown) {
+/** Código de matrícula/e-mail já cadastrado (unique_violation do Postgres) vs. qualquer outro erro de banco. */
+function erroCadastroDuplicado(erro: unknown) {
   return typeof erro === 'object' && erro !== null && 'code' in erro && (erro as { code: unknown }).code === '23505'
 }
 
@@ -39,9 +40,9 @@ async function registrarEvento(entidade: string, chave: string, tipo: string, de
 // ---------- Sessão ----------
 
 export async function entrar(_: Resultado, form: FormData): Promise<Resultado> {
-  const email = texto(form, 'email')?.toLowerCase()
+  const matricula = texto(form, 'matricula')?.toUpperCase()
   const senha = texto(form, 'senha')
-  if (!email || !senha) return { erro: 'Informe e-mail e senha.' }
+  if (!matricula || !senha) return { erro: 'Informe matrícula e senha.' }
   try {
     await garantirAdmin()
   } catch {
@@ -50,10 +51,10 @@ export async function entrar(_: Resultado, form: FormData): Promise<Resultado> {
   // Busca independente de "ativo" para poder avisar quem está aguardando aprovação —
   // mas só revela isso depois de confirmar a senha, para não vazar quem tem conta.
   const usuario = await queryOne<{ id: number; senha_hash: string; ativo: boolean; pendente_aprovacao: boolean }>(
-    'select id, senha_hash, ativo, pendente_aprovacao from usuarios where email = $1',
-    [email],
+    'select id, senha_hash, ativo, pendente_aprovacao from usuarios where matricula = $1',
+    [matricula],
   )
-  if (!usuario || !(await conferirSenha(senha, usuario.senha_hash))) return { erro: 'E-mail ou senha inválidos.' }
+  if (!usuario || !(await conferirSenha(senha, usuario.senha_hash))) return { erro: 'Matrícula ou senha inválidas.' }
   if (!usuario.ativo) {
     return {
       erro: usuario.pendente_aprovacao
@@ -81,8 +82,17 @@ export async function cadastrar(_: Resultado, form: FormData): Promise<Resultado
       [nome, matricula, email, await hashSenha(senha)],
     )
   } catch (erro) {
-    return { erro: erroEmailDuplicado(erro) ? 'Já existe um cadastro com esse e-mail.' : 'Não foi possível enviar o cadastro. Tente novamente.' }
+    return {
+      erro: erroCadastroDuplicado(erro) ? 'Já existe um cadastro com essa matrícula ou e-mail.' : 'Não foi possível enviar o cadastro. Tente novamente.',
+    }
   }
+  // Avisa quem pode aprovar. Nunca deixa a notificação derrubar o cadastro (já feito e ok).
+  enviarPushPerfis(['admin'], {
+    titulo: 'Novo cadastro para aprovar',
+    corpo: `${nome} (matrícula ${matricula}) pediu acesso.`,
+    url: '/configuracoes',
+    tag: 'cadastro-pendente',
+  }).catch(() => {})
   return { ok: true }
 }
 
@@ -246,12 +256,12 @@ export async function salvarUsuario(_: Resultado, form: FormData): Promise<Resul
   const id = Number(texto(form, 'id') ?? 0)
   const email = texto(form, 'email')?.toLowerCase()
   const nome = texto(form, 'nome')
-  const matricula = texto(form, 'matricula')?.toUpperCase() ?? null
+  const matricula = texto(form, 'matricula')?.toUpperCase()
   const perfil = texto(form, 'perfil') as Perfil | null
   const senha = texto(form, 'senha')
   const ativo = form.get('ativo') !== 'nao'
-  if (!email || !nome || !perfil || !['admin', 'abastecimento', 'gerencia', 'consulta'].includes(perfil)) {
-    return { erro: 'Preencha nome, e-mail e perfil.' }
+  if (!email || !nome || !matricula || !perfil || !['admin', 'abastecimento', 'gerencia', 'consulta'].includes(perfil)) {
+    return { erro: 'Preencha nome, matrícula, e-mail e perfil.' }
   }
   if (senha && senha.length < 8) return { erro: 'A senha precisa de pelo menos 8 caracteres.' }
   try {
@@ -267,7 +277,7 @@ export async function salvarUsuario(_: Resultado, form: FormData): Promise<Resul
       await query('insert into usuarios (email, nome, matricula, perfil, senha_hash) values ($1,$2,$3,$4,$5)', [email, nome, matricula, perfil, await hashSenha(senha)])
     }
   } catch (erro) {
-    return { erro: erroEmailDuplicado(erro) ? 'Já existe um usuário com esse e-mail.' : 'Não foi possível salvar. Tente novamente.' }
+    return { erro: erroCadastroDuplicado(erro) ? 'Já existe um usuário com essa matrícula ou e-mail.' : 'Não foi possível salvar. Tente novamente.' }
   }
   revalidatePath('/configuracoes')
   return { ok: true }
@@ -311,4 +321,32 @@ export async function salvarConfiguracoes(_: Resultado, form: FormData): Promise
   )
   revalidatePath('/', 'layout')
   return { ok: true }
+}
+
+// ---------- Notificações push ----------
+
+type InscricaoPush = { endpoint: string; keys: { p256dh: string; auth: string } }
+
+export async function inscreverPush(inscricao: InscricaoPush) {
+  const usuario = await exigirUsuario()
+  if (!inscricao?.endpoint || !inscricao.keys?.p256dh || !inscricao.keys?.auth) throw new Error('Inscrição inválida.')
+  await query(
+    `insert into push_inscricoes (usuario_id, endpoint, p256dh, auth) values ($1, $2, $3, $4)
+     on conflict (endpoint) do update set usuario_id = excluded.usuario_id, p256dh = excluded.p256dh, auth = excluded.auth`,
+    [usuario.id, inscricao.endpoint, inscricao.keys.p256dh, inscricao.keys.auth],
+  )
+}
+
+export async function desinscreverPush(endpoint: string) {
+  const usuario = await exigirUsuario()
+  await query('delete from push_inscricoes where endpoint = $1 and usuario_id = $2', [endpoint, usuario.id])
+}
+
+export async function testarPush() {
+  const usuario = await exigirUsuario()
+  await enviarPushUsuario(usuario.id, {
+    titulo: 'Central de Abastecimento',
+    corpo: 'Notificações ativadas. Você vai receber avisos por aqui.',
+    url: '/configuracoes',
+  })
 }
