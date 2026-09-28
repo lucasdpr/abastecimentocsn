@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { CheckCircle2, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
+import { CircleCheckBig, FileSpreadsheet, LoaderCircle, Upload } from 'lucide-react'
 import { BASES, converterLinha, identificarBase, mapearColunas, type BaseId } from '@/lib/bases'
 import { numero } from '@/lib/formato'
 
@@ -120,7 +120,7 @@ export function Importador() {
   return (
     <div className="space-y-4">
       <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line bg-surface px-4 py-10 text-center transition-colors hover:border-accent">
-        {lendo ? <Loader2 className="size-7 animate-spin text-accent" /> : <Upload className="size-7 text-muted" />}
+        {lendo ? <LoaderCircle className="size-7 animate-spin text-accent" /> : <Upload className="size-7 text-muted" />}
         <span className="text-sm font-medium">{lendo ? `Lendo ${arquivo}…` : 'Selecionar planilha (.xlsx, .xltx)'}</span>
         <span className="text-xs text-muted">Ordens, Follow-up (FUP), Ativação ou Reservas. O tipo é detectado pelo cabeçalho.</span>
         <input
@@ -164,7 +164,7 @@ export function Importador() {
               </span>
             </label>
             <button className="btn btn-primary w-full sm:w-auto" onClick={importar} disabled={enviando || !abas.some((a) => a.selecionada)}>
-              {enviando ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+              {enviando ? <LoaderCircle className="size-4 animate-spin" /> : <Upload className="size-4" />}
               {enviando ? 'Importando…' : 'Importar selecionadas'}
             </button>
             {progresso && <p className="text-xs text-muted">{progresso}</p>}
@@ -176,7 +176,7 @@ export function Importador() {
 
       {resultados.map((r) => (
         <div key={r.base} className="flex items-start gap-3 rounded-lg bg-good-soft px-4 py-3 text-sm">
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-good-ink" />
+          <CircleCheckBig className="mt-0.5 size-4 shrink-0 text-good-ink" />
           <div>
             <div className="font-medium">{BASES[r.base].nome} atualizada</div>
             <div className="text-xs text-ink-2">

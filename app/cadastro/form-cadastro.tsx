@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import { CircleCheckBig } from 'lucide-react'
 import { cadastrar } from '@/app/acoes'
 
 // Mesmos rótulos de lib/auth.ts (PERFIS/PERFIS_AUTOCADASTRO) — não pode importar
@@ -18,7 +18,7 @@ export function FormCadastro() {
   if (estado?.ok) {
     return (
       <div className="flex flex-col items-center gap-3 py-4 text-center">
-        <CheckCircle2 className="size-10 text-good" />
+        <CircleCheckBig className="size-10 text-good" />
         <p className="text-sm font-medium">Cadastro enviado.</p>
         <p className="text-sm text-muted">Um administrador precisa aprovar o seu acesso antes que você possa entrar.</p>
       </div>
