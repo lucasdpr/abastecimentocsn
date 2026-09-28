@@ -51,7 +51,16 @@ export function FormUsuario({ usuario }: { usuario?: Usuario }) {
     <form action={acao} className="grid gap-2 sm:grid-cols-2">
       {usuario && <input type="hidden" name="id" value={usuario.id} />}
       <input className="input" name="nome" placeholder="Nome" defaultValue={usuario?.nome} required />
-      <input className="input" name="matricula" placeholder="Matrícula" defaultValue={usuario?.matricula ?? ''} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+      <input
+        className="input uppercase placeholder:normal-case"
+        name="matricula"
+        placeholder="Matrícula"
+        defaultValue={usuario?.matricula ?? ''}
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        required
+      />
       <input className="input" type="email" name="email" placeholder="E-mail" defaultValue={usuario?.email} required />
       <select className="input" name="perfil" defaultValue={usuario?.perfil ?? 'consulta'}>
         <option value="admin">Administrador</option>

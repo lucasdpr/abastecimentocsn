@@ -25,7 +25,17 @@ export function FormCadastro() {
       </div>
       <div>
         <label className="label" htmlFor="matricula">Matrícula</label>
-        <input className="input h-11" id="matricula" name="matricula" autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} required />
+        <input
+          className="input h-11 uppercase placeholder:normal-case"
+          id="matricula"
+          name="matricula"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="Ex.: CBK3574"
+          required
+        />
       </div>
       <div>
         <label className="label" htmlFor="email">E-mail</label>

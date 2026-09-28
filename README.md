@@ -11,7 +11,9 @@ App (PWA) de acompanhamento da Central de Abastecimento de Manutenção. É uma 
 - **Ativação** e **ANTECs**.
 - **Assistente IA**: responde pelo número da OM ou do PO, por material ou fornecedor, sempre consultando o banco. Sem chave de IA configurada, responde em "modo direto" (consulta objetiva, sem modelo).
 - **Importar / Excel**: sobe a planilha do SAP (o tipo é detectado pelo cabeçalho). Exporta xlsx/csv com as mesmas colunas e mais as colunas `APP ...`. Editar essas colunas e reimportar atualiza o app, e o Excel pode puxar os dados direto pelo Power Query.
+- **Notificações push**: avisa direto no aparelho (com o app fechado) quando alguém pede cadastro, por exemplo. Ativa em Configurações → Notificações.
 - **Perfis**: Administrador, Abastecimento (edita), Gerência (vê tudo), Consulta (ordens e IA).
+- **Login por matrícula** (não por e-mail). O e-mail continua guardado como contato.
 
 ## Configuração (Vercel → Settings → Environment Variables)
 
@@ -19,8 +21,9 @@ App (PWA) de acompanhamento da Central de Abastecimento de Manutenção. É uma 
 |---|---|
 | `DATABASE_URL` | URL *pooled* do projeto Neon **Abastecimento CSN** (separado da OMS) |
 | `AUTH_SECRET` | texto aleatório com 32 caracteres ou mais |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | primeiro administrador, criado no primeiro login |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_MATRICULA` | primeiro administrador, criado no primeiro login (as três são obrigatórias) |
 | `EXPORT_TOKEN` | 16 caracteres ou mais; habilita o Excel conectado (Power Query) |
+| `VAPID_PUBLIC_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (mesmo valor) / `VAPID_PRIVATE_KEY` | opcional: notificações push (gere com `npx web-push generate-vapid-keys`) |
 | `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` | opcional: qualquer API compatível com OpenAI (ex.: Gemini grátis) |
 | `AI_GATEWAY_API_KEY`, `AI_MODEL` | opcional: Vercel AI Gateway (no Vercel também usa o token OIDC automaticamente) |
 

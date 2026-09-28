@@ -1,5 +1,6 @@
 import { aprovarUsuario, recusarUsuario } from '@/app/acoes'
 import { FormParametros, FormSenha, FormUsuario } from '@/components/forms-config'
+import { NotificacoesPush } from '@/components/notificacoes-push'
 import { Cabecalho, Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, PERFIS, pode, type Perfil } from '@/lib/auth'
 import { configuracoes } from '@/lib/consultas'
@@ -35,11 +36,14 @@ export default async function PaginaConfiguracoes() {
 
   return (
     <>
-      <Cabecalho titulo="Configurações" descricao={`${usuario.nome} · ${usuario.email} · ${PERFIS[usuario.perfil]}`} />
+      <Cabecalho titulo="Configurações" descricao={`${usuario.nome} · Matrícula ${usuario.matricula ?? '—'} · ${PERFIS[usuario.perfil]}`} />
       <div className="grid min-w-0 gap-4 lg:grid-cols-3">
         <div className="min-w-0 space-y-4">
           <Painel titulo="Minha senha">
             <FormSenha />
+          </Painel>
+          <Painel titulo="Notificações" descricao="Avisos direto neste aparelho, mesmo com o app fechado.">
+            <NotificacoesPush />
           </Painel>
           {admin && (
             <Painel titulo="Regras de alerta">
@@ -57,8 +61,7 @@ export default async function PaginaConfiguracoes() {
                       <div className="min-w-0">
                         <div className="text-sm font-medium">{u.nome}</div>
                         <div className="truncate text-xs text-muted">
-                          {u.email}
-                          {u.matricula ? ` · matrícula ${u.matricula}` : ''}
+                          Matrícula {u.matricula ?? '—'} · {u.email}
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1.5">
@@ -89,8 +92,7 @@ export default async function PaginaConfiguracoes() {
                           <div className="min-w-0">
                             <div className="text-sm font-medium">{u.nome}</div>
                             <div className="truncate text-xs text-muted">
-                              {u.email}
-                              {u.matricula ? ` · ${u.matricula}` : ''} · último acesso {dataHora(u.ultimo_acesso)}
+                              Matrícula {u.matricula ?? '—'} · {u.email} · último acesso {dataHora(u.ultimo_acesso)}
                             </div>
                           </div>
                           <div className="flex shrink-0 gap-1.5">
