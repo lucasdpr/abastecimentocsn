@@ -46,7 +46,9 @@ export function Navegacao({
 }) {
   const caminho = usePathname()
   const [aberto, setAberto] = useState(false)
-  useEffect(() => setAberto(false), [caminho])
+  useEffect(() => {
+    setAberto(false)
+  }, [caminho])
 
   const secoes: Array<{ titulo: string; itens: Item[] }> = [
     { titulo: 'Visão geral', itens: [{ href: '/', rotulo: 'Painel', icone: LayoutDashboard, perfis: GESTAO }] },
