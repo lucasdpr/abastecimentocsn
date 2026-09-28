@@ -42,8 +42,10 @@ export function AtualizacaoApp() {
       .catch(() => {})
 
     let recarregando = false
+    // Na primeira instalação não há versão antiga a substituir: não recarrega.
+    const tinhaControlador = !!navigator.serviceWorker.controller
     const aoTrocarControlador = () => {
-      if (recarregando) return
+      if (recarregando || !tinhaControlador) return
       recarregando = true
       window.location.reload()
     }
