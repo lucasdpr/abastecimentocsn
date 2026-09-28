@@ -1,3 +1,4 @@
+import { attachDatabasePool } from '@vercel/functions'
 import { Pool, types, type QueryResultRow } from 'pg'
 
 // Datas (sem hora) chegam como texto 'AAAA-MM-DD', evitando deslocamento de fuso.
@@ -12,8 +13,16 @@ function createPool() {
     connectionString,
     max: 5,
     idleTimeoutMillis: 10_000,
+    // Sem estes limites, uma conexão morta faz a consulta esperar para sempre
+    // e a página fica "presa" até a Vercel matar a função.
+    connectionTimeoutMillis: 8_000,
+    query_timeout: 20_000,
+    keepAlive: true,
     ssl: /sslmode=require|neon\.tech/.test(connectionString) ? { rejectUnauthorized: false } : undefined,
   })
+  // Recomendação da Vercel: fecha as conexões ociosas antes de a função hibernar,
+  // em vez de deixá-las mortas no pool para a próxima requisição.
+  attachDatabasePool(pool)
   // Essencial com bancos que hibernam sozinhos (Neon free): quando o banco
   // derruba uma conexão ociosa do pool, o driver emite 'error' nesse objeto.
   // Sem um listener aqui, o Node trata como exceção não tratada e derruba
@@ -40,7 +49,7 @@ function erroDeConexao(erro: unknown) {
     codigo === 'ETIMEDOUT' ||
     codigo === '57P01' || // admin_shutdown (Neon suspendendo o compute)
     codigo === 'XX000' ||
-    /Connection terminated|connection reset|timeout expired/i.test(mensagem)
+    /Connection terminated|connection reset|timeout expired|timeout exceeded|not queryable|Query read timeout/i.test(mensagem)
   )
 }
 
@@ -51,7 +60,9 @@ async function executar<T extends QueryResultRow>(text: string, params: unknown[
     return await pool().query<T>(text, params)
   } catch (erro) {
     if (!erroDeConexao(erro)) throw erro
+    const antigo = globalForPool.pgPool
     globalForPool.pgPool = undefined
+    antigo?.end().catch(() => {})
     await new Promise((resolver) => setTimeout(resolver, 300))
     return await pool().query<T>(text, params)
   }
