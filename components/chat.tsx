@@ -11,20 +11,20 @@ const SUGESTOES = ['O que preciso cobrar hoje?', 'Resumo da carteira', 'Situaç�
 /** Markdown mínimo: **negrito**, listas com "-", links para OM. */
 function Texto({ texto }: { texto: string }) {
   const inline = (linha: string) =>
-    linha.split(/(\*\*[^*]+\*\*|\bOM \d{8,12}\b)/g).map((parte, i) => {
+    linha.split(/(\*\*[^*]+\*\*|\bOM \d{8,12}\b)/g).map((parte, indice) => {
       if (parte.startsWith('**') && parte.endsWith('**')) {
         const interno = parte.slice(2, -2)
         const om = interno.match(/^OM (\d{8,12})/)
-        return om ? <Link key={i} href={`/ordens/${om[1]}`} className="font-semibold text-accent hover:underline">{interno}</Link> : <strong key={i}>{interno}</strong>
+        return om ? <Link key={indice} href={`/ordens/${om[1]}`} className="font-semibold text-accent hover:underline">{interno}</Link> : <strong key={indice}>{interno}</strong>
       }
       const om = parte.match(/^OM (\d{8,12})$/)
-      if (om) return <Link key={i} href={`/ordens/${om[1]}`} className="text-accent hover:underline">{parte}</Link>
-      return <Fragment key={i}>{parte}</Fragment>
+      if (om) return <Link key={indice} href={`/ordens/${om[1]}`} className="text-accent hover:underline">{parte}</Link>
+      return <Fragment key={indice}>{parte}</Fragment>
     })
   const blocos: React.ReactNode[] = []
   let lista: string[] = []
   const fecharLista = () => {
-    if (lista.length) blocos.push(<ul key={blocos.length} className="my-1 list-disc space-y-1 pl-5">{lista.map((l, i) => <li key={i}>{inline(l)}</li>)}</ul>)
+    if (lista.length) blocos.push(<ul key={blocos.length} className="my-1 list-disc space-y-1 pl-5">{lista.map((l, indice) => <li key={indice}>{inline(l)}</li>)}</ul>)
     lista = []
   }
   for (const linha of texto.split('\n')) {
@@ -83,13 +83,13 @@ export function Chat({ nome }: { nome: string }) {
             </div>
           </div>
         )}
-        {mensagens.map((m, i) =>
+        {mensagens.map((m, indice) =>
           m.role === 'user' ? (
-            <div key={i} className="flex justify-end">
+            <div key={indice} className="flex justify-end">
               <div className="max-w-[85%] rounded-2xl rounded-br-md bg-brand px-4 py-2.5 text-sm text-brand-ink">{m.content}</div>
             </div>
           ) : (
-            <div key={i} className="flex gap-3">
+            <div key={indice} className="flex gap-3">
               <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand"><Bot className="size-4" /></div>
               <div className="card min-w-0 max-w-[90%] px-4 py-3 text-sm leading-relaxed">
                 <Texto texto={m.content} />
