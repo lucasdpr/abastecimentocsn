@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg'
 import { BASES, converterValor, normalizarCabecalho, type Base, type BaseId } from './bases'
 import { pool, query, queryOne } from './db'
 
-const TIPO_SQL = { texto: 'text', numero: 'numeric', inteiro: 'int', data: 'date', flag: 'boolean', simnao: 'boolean' } as const
+const TIPO_SQL = { texto: 'text', codigo: 'text', numero: 'numeric', inteiro: 'int', data: 'date', flag: 'boolean', simnao: 'boolean' } as const
 
 /** Campos acompanhados no histórico quando mudam de uma importação para outra. */
 const CAMPOS_HISTORICO: Partial<Record<BaseId, Record<string, string>>> = {
