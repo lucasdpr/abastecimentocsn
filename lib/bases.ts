@@ -1,7 +1,9 @@
 // Definição das planilhas exportadas do SAP que o app sabe importar/exportar.
 // Usado no navegador (leitura do Excel) e no servidor (gravação no banco).
 
-export type TipoCampo = 'texto' | 'numero' | 'inteiro' | 'data' | 'flag' | 'simnao'
+// codigo: texto, mas só dígitos perdem os zeros à esquerda (o SAP exporta 0031826684 ou 31826684
+// conforme o layout; sem isso a mesma reserva viraria duas linhas).
+export type TipoCampo = 'texto' | 'codigo' | 'numero' | 'inteiro' | 'data' | 'flag' | 'simnao'
 
 export type Campo = {
   campo: string
@@ -24,6 +26,8 @@ export type Base = {
   chave: string[]
   /** Cabeçalhos que precisam existir para reconhecer a planilha. */
   assinatura: string[]
+  /** Outros layouts da mesma planilha (ex.: cabeçalhos abreviados do SAP). */
+  outrasAssinaturas?: string[][]
   campos: Campo[]
   /** Monta a chave quando ela não vem pronta na planilha. */
   derivarChave?: (linha: Record<string, unknown>) => Record<string, unknown>
@@ -41,27 +45,29 @@ export const BASES: Record<BaseId, Base> = {
     tabela: 'ordem_itens',
     chave: ['ordem', 'reserva', 'item'],
     assinatura: ['Status do item', 'Ordem', 'Nº reserva', 'Status do sistema'],
+    // Exportação direta do SAP (ORDENS itens de reserva), com cabeçalhos abreviados.
+    outrasAssinaturas: [['Stat Item', 'Ordem', 'Nºreser.', 'Status do sistema']],
     campos: [
-      c('status_item', 'texto', 'Status do item'),
-      c('norma_apropriacao', 'texto', 'Norma de apropriação'),
-      c('material', 'texto', 'Material'),
+      c('status_item', 'texto', 'Status do item', 'Stat Item'),
+      c('norma_apropriacao', 'texto', 'Norma de apropriação', 'Norma apro'),
+      c('material', 'codigo', 'Material'),
       c('descricao', 'texto', 'Texto breve material'),
-      c('qtd', 'numero', 'Qtd.necessária'),
-      c('unidade', 'texto', 'Unid.medida básica'),
-      c('grp_planejamento', 'texto', 'Grp.plnj.PM'),
-      c('ordem', 'texto', 'Ordem'),
-      c('reserva', 'texto', 'Nº reserva'),
-      c('item', 'texto', 'Nº item reserva transferência'),
-      c('data_necessidade', 'data', 'Data da necessidade'),
+      c('qtd', 'numero', 'Qtd.necessária', 'Qtd.necess.'),
+      c('unidade', 'texto', 'Unid.medida básica', 'UMB'),
+      c('grp_planejamento', 'texto', 'Grp.plnj.PM', 'GPM'),
+      c('ordem', 'codigo', 'Ordem'),
+      c('reserva', 'codigo', 'Nº reserva', 'Nºreser.'),
+      c('item', 'codigo', 'Nº item reserva transferência', 'Item'),
+      c('data_necessidade', 'data', 'Data da necessidade', 'Data nec.'),
       c('status_aprovacao', 'texto', 'Status Aprovação'),
       c('status_usuario', 'texto', 'Status usuário'),
       c('status_sistema', 'texto', 'Status do sistema'),
       c('local_instalacao', 'texto', 'Local de instalação'),
-      c('preco_medio', 'numero', 'Preço médio móvel'),
+      c('preco_medio', 'numero', 'Preço médio móvel', 'PMM'),
       c('qtd_retirada', 'numero', 'Qtd.retirada'),
-      c('registro_final', 'flag', 'Com registro final'),
-      c('eliminado', 'flag', 'Item foi eliminado'),
-      c('permitido_movimento', 'flag', 'Permitido movimento'),
+      c('registro_final', 'flag', 'Com registro final', 'RgF'),
+      c('eliminado', 'flag', 'Item foi eliminado', 'Eli'),
+      c('permitido_movimento', 'flag', 'Permitido movimento', 'Mov.perm.'),
       c('texto_ordem', 'texto', 'Texto breve'),
       a('app_situacao', 'APP Situação'),
       a('app_setor', 'APP Setor responsável'),
@@ -189,7 +195,8 @@ export function normalizarCabecalho(valor: unknown) {
 /** Descobre qual base a linha de cabeçalho representa. */
 export function identificarBase(cabecalho: unknown[]): Base | null {
   const presentes = new Set(cabecalho.map(normalizarCabecalho))
-  return LISTA_BASES.find((b) => b.assinatura.every((h) => presentes.has(normalizarCabecalho(h)))) ?? null
+  const confere = (assinatura: string[]) => assinatura.every((h) => presentes.has(normalizarCabecalho(h)))
+  return LISTA_BASES.find((b) => [b.assinatura, ...(b.outrasAssinaturas ?? [])].some(confere)) ?? null
 }
 
 /** Mapeia índice da coluna -> campo. */
@@ -239,6 +246,10 @@ export function converterValor(tipo: TipoCampo, valor: unknown): string | number
   switch (tipo) {
     case 'texto':
       return texto(valor)
+    case 'codigo': {
+      const s = texto(valor)
+      return s && /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, '') : s
+    }
     case 'numero':
       return numero(valor)
     case 'inteiro': {

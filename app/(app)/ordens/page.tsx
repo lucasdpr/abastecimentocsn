@@ -61,6 +61,9 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                       <SeloSituacao situacao={o.situacao} />
                     </div>
                     <p className="mt-0.5 truncate text-sm text-ink-2">{o.texto_ordem ?? '—'}</p>
+                    <p className="codigo mt-1 truncate text-[11px] text-muted">
+                      {o.status_usuario ?? '—'} · {o.status_sistema ?? '—'}
+                    </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                       <SeloParada diasParada={o.dias_parada} limite={cfg.diasSemMovimentacao} abertos={o.itens_abertos} />
                       <span>{o.itens_abertos}/{o.itens} itens abertos</span>
@@ -80,6 +83,8 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                   <th>Ordem</th>
                   <th>Descrição</th>
                   <th>Grupo</th>
+                  <th>Status usuário</th>
+                  <th>Status sistema</th>
                   <th className="text-right">Itens abertos</th>
                   <th>Necessidade</th>
                   <th className="text-right">Valor</th>
@@ -95,11 +100,13 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                         {o.ordem}
                       </Link>
                     </td>
-                    <td className="max-w-[320px]">
+                    <td className="max-w-[260px]">
                       <div className="truncate">{o.texto_ordem ?? '—'}</div>
                       <div className="truncate text-xs text-muted">{o.local_instalacao}</div>
                     </td>
                     <td className="text-ink-2">{o.grp_planejamento}</td>
+                    <td className="codigo text-xs whitespace-nowrap text-ink-2">{o.status_usuario ?? '—'}</td>
+                    <td className="codigo text-xs whitespace-nowrap text-ink-2">{o.status_sistema ?? '—'}</td>
                     <td className="num text-right">
                       {o.itens_abertos}
                       <span className="text-muted">/{o.itens}</span>
