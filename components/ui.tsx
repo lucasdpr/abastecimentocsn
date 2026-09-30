@@ -192,7 +192,7 @@ export function Composicao({ partes, formatar = (v) => v.toLocaleString('pt-BR')
           <div key={p.rotulo} className="h-full min-w-[3px] first:rounded-l-full last:rounded-r-full" style={{ width: `${(p.valor / total) * 100}%`, background: p.cor }} title={`${p.rotulo}: ${formatar(p.valor)}`} />
         ))}
       </div>
-      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+      <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-2">
         {partes.map((p) => (
           <li key={p.rotulo} className="flex min-w-0 items-start gap-2 text-xs">
             <span className="mt-1 size-2 shrink-0 rounded-[3px]" style={{ background: p.cor }} aria-hidden />
@@ -250,6 +250,46 @@ export function Filtros({
               ativo ? 'border-transparent bg-ink text-surface' : 'border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink',
             )}
           >
+            {o.rotulo}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Abas de visão (lista/gráficos) que preservam os filtros da URL. */
+export function Abas({
+  base,
+  parametros,
+  chave,
+  opcoes,
+}: {
+  base: string
+  parametros: Record<string, string | undefined>
+  chave: string
+  opcoes: Array<{ valor: string; rotulo: string; icone?: LucideIcon }>
+}) {
+  const atual = parametros[chave] ?? ''
+  return (
+    <div className="inline-flex rounded-xl border border-line bg-surface-3 p-1" role="tablist">
+      {opcoes.map((o) => {
+        const p = new URLSearchParams(Object.entries(parametros).filter(([k, v]) => v && k !== chave && k !== 'pagina') as [string, string][])
+        if (o.valor) p.set(chave, o.valor)
+        const ativo = atual === o.valor
+        const Icone = o.icone
+        return (
+          <Link
+            key={o.valor}
+            href={`${base}${p.size ? `?${p}` : ''}`}
+            role="tab"
+            aria-selected={ativo}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium transition-colors',
+              ativo ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink',
+            )}
+          >
+            {Icone && <Icone className="size-4" aria-hidden />}
             {o.rotulo}
           </Link>
         )

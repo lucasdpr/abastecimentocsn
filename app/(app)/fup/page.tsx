@@ -1,10 +1,12 @@
-import { ChevronDown, Megaphone } from 'lucide-react'
+import Link from 'next/link'
+import { ChartColumn, ChevronDown, List, Megaphone } from 'lucide-react'
 import { cobrarFornecedor } from '@/app/acoes'
 import { FormFup } from '@/components/form-fup'
 import { SeletorFiltro } from '@/components/seletor-filtro'
-import { Busca, Cabecalho, Filtros, Paginacao, Painel, Selo, Vazio } from '@/components/ui'
+import { GraficoColunas } from '@/components/graficos'
+import { Abas, Barras, Busca, Cabecalho, Composicao, Filtros, Medidor, Paginacao, Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { listarFup } from '@/lib/consultas'
+import { graficosFup, listarFup } from '@/lib/consultas'
 import { data, moeda, moedaCurta, numero } from '@/lib/formato'
 import { cn } from '@/lib/utils'
 
@@ -13,7 +15,7 @@ export const metadata = { title: 'Follow-up' }
 /** Colunas da lista no desktop (cabeçalho e linhas precisam bater). */
 const COLUNAS = 'grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)_7.5rem_9rem_6rem_1rem] gap-4'
 
-type Params = { busca?: string; prazo?: string; retorno?: string; responsavel?: string; evento?: string; pagina?: string }
+type Params = { busca?: string; prazo?: string; retorno?: string; responsavel?: string; evento?: string; pagina?: string; aba?: string }
 
 type Linha = {
   po_item: string
@@ -44,14 +46,29 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
   const usuario = await exigirUsuario(pode.verGestao)
   const sp = await searchParams
   const pagina = Math.max(1, Number(sp.pagina) || 1)
-  const r = await listarFup({ ...sp, pagina })
+  const verGraficos = sp.aba === 'graficos'
+  const [r, g] = await Promise.all([listarFup({ ...sp, pagina, semLinhas: verGraficos }), verGraficos ? graficosFup(sp) : null])
   const linhas = r.linhas as Linha[]
-  const parametros = { busca: sp.busca, prazo: sp.prazo, retorno: sp.retorno, responsavel: sp.responsavel, evento: sp.evento }
+  const parametros = { busca: sp.busca, prazo: sp.prazo, retorno: sp.retorno, responsavel: sp.responsavel, evento: sp.evento, aba: sp.aba }
   const editar = pode.editar(usuario)
 
   return (
     <>
-      <Cabecalho titulo="Follow-up de pedidos" descricao="Ativação dos fornecedores e tratativa dos pedidos em carteira." />
+      <Cabecalho
+        titulo="Follow-up de pedidos"
+        descricao="Ativação dos fornecedores e tratativa dos pedidos em carteira."
+        acoes={
+          <Abas
+            base="/fup"
+            parametros={parametros}
+            chave="aba"
+            opcoes={[
+              { valor: '', rotulo: 'Lista', icone: List },
+              { valor: 'graficos', rotulo: 'Gráficos', icone: ChartColumn },
+            ]}
+          />
+        }
+      />
       <div className="mb-4 space-y-3">
         <Busca placeholder="PO, fornecedor, material, RM…" valor={sp.busca} ocultos={{ ...parametros, busca: undefined }} />
         <Filtros base="/fup" parametros={parametros} chave="prazo" opcoes={[
@@ -95,7 +112,9 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
 
       <p className="mb-2 text-xs text-muted">{numero(r.total)} itens · {moeda(r.valor)}</p>
 
-      {!linhas.length ? (
+      {g ? (
+        <GraficosFup g={g} />
+      ) : !linhas.length ? (
         <Vazio texto="Nenhum item de follow-up neste filtro." />
       ) : (
         <div className="card overflow-hidden">
@@ -182,7 +201,110 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
           </ul>
         </div>
       )}
-      <Paginacao base="/fup" parametros={parametros} pagina={pagina} total={r.total} porPagina={r.porPagina} />
+      {!g && <Paginacao base="/fup" parametros={parametros} pagina={pagina} total={r.total} porPagina={r.porPagina} />}
     </>
+  )
+}
+
+function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
+  const aberto = Number(g.retorno.com_retorno) + Number(g.retorno.sem_retorno)
+  const atrasado = g.faixas.filter((f) => f.grupo === 'atraso').reduce((s, f) => s + f.valor, 0)
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Painel
+          className="flex flex-col lg:col-span-2"
+          titulo="Remessas por prazo"
+          descricao={`Valor dos pedidos em aberto pela data de remessa (nova data, se houver). ${moedaCurta(atrasado)} já passaram da data.`}
+        >
+          <GraficoColunas
+            dados={g.faixas}
+            legendas={{ atraso: 'Atrasado há', prazo: 'Vence em' }}
+            preencher
+            descricao="Gráfico de colunas: valor em aberto por faixa de dias de atraso ou até a remessa"
+          />
+        </Painel>
+        <div className="flex flex-col gap-4">
+          <Painel titulo="Retorno do fornecedor" descricao="Valor em aberto: o fornecedor já respondeu?">
+            {aberto ? (
+              <>
+                <Composicao
+                  partes={[
+                    { rotulo: 'Com retorno', valor: Number(g.retorno.com_retorno), cor: 'var(--series-1)' },
+                    { rotulo: 'Sem retorno', valor: Number(g.retorno.sem_retorno), cor: 'var(--series-2)' },
+                  ]}
+                  formatar={moedaCurta}
+                />
+                {g.retorno.itens_3x > 0 && (
+                  <Link href="/fup?retorno=cancelavel" className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-line bg-surface-2 p-3 text-xs transition-colors hover:border-line-strong">
+                    <span className="text-ink-2">
+                      <span className="font-semibold text-ink">{numero(g.retorno.itens_3x)} itens</span> sem retorno depois de 3+ cobranças: elegíveis a cancelar ou prorrogar.
+                    </span>
+                    <span className="num shrink-0 font-semibold text-ink">{moedaCurta(g.retorno.cobrado_3x)}</span>
+                  </Link>
+                )}
+              </>
+            ) : (
+              <Vazio texto="Nenhum pedido em aberto neste recorte." />
+            )}
+          </Painel>
+          <Painel titulo="Com quem está a pendência" descricao="Valor em aberto por responsável." className="flex-1">
+            <Barras
+              formatar={moedaCurta}
+              itens={g.responsaveis.map((x) => ({ rotulo: x.responsavel, valor: Number(x.valor), detalhe: `${numero(x.itens)} itens` }))}
+            />
+          </Painel>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <Painel titulo="Fornecedores com mais valor em atraso" descricao="Top 10. Clique para ver os pedidos do fornecedor.">
+          <Barras
+            cor="var(--crit)"
+            formatar={moedaCurta}
+            itens={g.fornecedores.map((f) => ({
+              rotulo: f.fornecedor,
+              valor: Number(f.valor),
+              detalhe: `${numero(f.itens)} itens · ${f.sem_retorno === f.itens ? 'nenhum com retorno' : `${numero(f.sem_retorno)} sem retorno`}`,
+              href: `/fup?${new URLSearchParams({ busca: f.fornecedor, prazo: 'atraso' })}`,
+            }))}
+          />
+        </Painel>
+        <Painel titulo="Por diretoria" descricao="Pedidos em aberto: quanto já atrasou e quanto tem retorno." corpo="tabela">
+          {g.diretorias.length ? (
+            <div className="overflow-x-auto">
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Diretoria</th>
+                    <th className="text-right">Itens</th>
+                    <th className="text-right">Valor</th>
+                    <th className="w-36">Em atraso</th>
+                    <th className="w-36">Com retorno</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.diretorias.map((d) => (
+                    <tr key={d.diretoria}>
+                      <td className="font-medium">{d.diretoria}</td>
+                      <td className="num text-right">{numero(d.itens)}</td>
+                      <td className="num text-right whitespace-nowrap">{moedaCurta(d.valor)}</td>
+                      <td>
+                        <Medidor fracao={Number(d.valor) ? Number(d.valor_atraso) / Number(d.valor) : 0} cor="var(--crit)" rotulo={`${moedaCurta(d.valor_atraso)} em atraso`} />
+                      </td>
+                      <td>
+                        <Medidor fracao={Number(d.valor) ? Number(d.valor_retorno) / Number(d.valor) : 0} rotulo={`${moedaCurta(d.valor_retorno)} com retorno`} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="px-4 py-4 text-sm text-muted md:px-5">Nenhum pedido em aberto neste recorte.</p>
+          )}
+        </Painel>
+      </div>
+    </div>
   )
 }
