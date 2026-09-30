@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { SeloParada, SeloSituacao } from '@/components/selos'
+import { SeloParada, SeloSituacao, StatusSap } from '@/components/selos'
 import { SeletorFiltro } from '@/components/seletor-filtro'
 import { Busca, Cabecalho, Filtros, Paginacao, Vazio } from '@/components/ui'
 import { exigirUsuario } from '@/lib/auth'
@@ -61,9 +61,9 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                       <SeloSituacao situacao={o.situacao} />
                     </div>
                     <p className="mt-0.5 truncate text-sm text-ink-2">{o.texto_ordem ?? '—'}</p>
-                    <p className="codigo mt-1 truncate text-[11px] text-muted">
-                      {o.status_usuario ?? '—'} · {o.status_sistema ?? '—'}
-                    </p>
+                    <div className="mt-1.5">
+                      <StatusSap usuario={o.status_usuario} sistema={o.status_sistema} linha />
+                    </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                       <SeloParada diasParada={o.dias_parada} limite={cfg.diasSemMovimentacao} abertos={o.itens_abertos} />
                       <span>{o.itens_abertos}/{o.itens} itens abertos</span>
@@ -82,14 +82,11 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                 <tr>
                   <th>Ordem</th>
                   <th>Descrição</th>
-                  <th>Grupo</th>
-                  <th>Status usuário</th>
-                  <th>Status sistema</th>
-                  <th className="text-right">Itens abertos</th>
+                  <th title="Status do usuário / status do sistema">Status SAP</th>
+                  <th className="text-right" title="Itens abertos / total">Itens</th>
                   <th>Necessidade</th>
                   <th className="text-right">Valor</th>
-                  <th>Movimentação</th>
-                  <th>Acompanhamento</th>
+                  <th>Situação</th>
                 </tr>
               </thead>
               <tbody>
@@ -99,14 +96,15 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                       <Link href={`/ordens/${o.ordem}`} className="codigo font-medium text-accent hover:underline">
                         {o.ordem}
                       </Link>
+                      <div className="mt-0.5 text-xs text-muted">{o.grp_planejamento}</div>
                     </td>
-                    <td className="max-w-[260px]">
-                      <div className="truncate">{o.texto_ordem ?? '—'}</div>
+                    <td className="w-full max-w-0 min-w-40">
+                      <div className="truncate" title={o.texto_ordem ?? undefined}>{o.texto_ordem ?? '—'}</div>
                       <div className="truncate text-xs text-muted">{o.local_instalacao}</div>
                     </td>
-                    <td className="text-ink-2">{o.grp_planejamento}</td>
-                    <td className="codigo text-xs whitespace-nowrap text-ink-2">{o.status_usuario ?? '—'}</td>
-                    <td className="codigo text-xs whitespace-nowrap text-ink-2">{o.status_sistema ?? '—'}</td>
+                    <td>
+                      <StatusSap usuario={o.status_usuario} sistema={o.status_sistema} />
+                    </td>
                     <td className="num text-right">
                       {o.itens_abertos}
                       <span className="text-muted">/{o.itens}</span>
@@ -114,10 +112,10 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                     <td className="num whitespace-nowrap">{data(o.necessidade_mais_antiga)}</td>
                     <td className="num text-right whitespace-nowrap">{moeda(o.valor)}</td>
                     <td>
-                      <SeloParada diasParada={o.dias_parada} limite={cfg.diasSemMovimentacao} abertos={o.itens_abertos} />
-                    </td>
-                    <td>
-                      <SeloSituacao situacao={o.situacao} />
+                      <div className="flex flex-col items-start gap-1">
+                        <SeloParada diasParada={o.dias_parada} limite={cfg.diasSemMovimentacao} abertos={o.itens_abertos} />
+                        {o.situacao && o.situacao !== 'sem_acao' && <SeloSituacao situacao={o.situacao} />}
+                      </div>
                       {o.setor_responsavel && <div className="mt-1 text-xs text-muted">{o.setor_responsavel}</div>}
                     </td>
                   </tr>

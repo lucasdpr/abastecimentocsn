@@ -21,7 +21,7 @@ export function SeletorFiltro({
     <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
       <span className="shrink-0 text-xs text-muted">{rotulo}</span>
       <select
-        className="input h-8 min-w-0 py-0 text-xs sm:w-44"
+        className="input h-8 min-w-0 rounded-lg py-0 text-xs sm:w-48"
         value={parametros[chave] ?? ''}
         onChange={(e) => {
           const p = new URLSearchParams(Object.entries(parametros).filter(([k, v]) => v && k !== chave && k !== 'pagina') as [string, string][])

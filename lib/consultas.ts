@@ -216,14 +216,24 @@ export async function detalheOrdem(ordem: string) {
   return { resumo, itens, pedidos, eventos, antecs }
 }
 
-export async function listarFup(params: {
+type FiltroFup = {
   busca?: string
   prazo?: string
   retorno?: string
   responsavel?: string
   evento?: string
-  pagina?: number
-}) {
+  /** Índice em FAIXAS_REMESSA (clique numa coluna do gráfico). */
+  remessa?: string
+  diretoria?: string
+}
+
+/** Limites (em dias até a remessa) de cada faixa de FAIXAS_REMESSA. */
+const LIMITES_REMESSA: Array<[number | null, number | null]> = [
+  [null, -181], [-180, -91], [-90, -31], [-30, -1], [0, 30], [31, 90], [91, null],
+]
+
+/** WHERE da tela de follow-up: a lista e os gráficos usam exatamente o mesmo recorte. */
+function filtroFup(params: FiltroFup) {
   const where = ['f.removido_em is null']
   const valores: unknown[] = []
   const add = (sql: string, valor: unknown) => {
@@ -241,15 +251,29 @@ export async function listarFup(params: {
   if (params.retorno === 'cancelavel') where.push(`not coalesce(f.retorno, false) and f.cobrancas >= 3 and ${FUP_PRAZO_SQL} <> 'encerrado'`)
   if (params.responsavel) add('coalesce(f.responsavel, \'Não definido\') = ?', params.responsavel)
   if (params.evento === 'rg') where.push("f.evento = 'RG'")
+  const limites = params.remessa ? LIMITES_REMESSA[Number(params.remessa)] : undefined
+  if (limites) {
+    const d = 'coalesce(f.nova_data, f.data_remessa_corrigida) - current_date'
+    where.push(`${FUP_PRAZO_SQL} <> 'encerrado' and ${d} is not null`)
+    if (limites[0] != null) where.push(`${d} >= ${limites[0]}`)
+    if (limites[1] != null) where.push(`${d} <= ${limites[1]}`)
+  }
+  if (params.diretoria) add("coalesce(nullif(f.diretoria, ''), 'Sem diretoria') = ?", params.diretoria)
+  return { sqlWhere: `where ${where.join(' and ')}`, valores }
+}
+
+export async function listarFup(params: FiltroFup & { pagina?: number; semLinhas?: boolean }) {
+  const { sqlWhere, valores } = filtroFup(params)
   const porPagina = 50
   const pagina = params.pagina ?? 1
-  const sqlWhere = `where ${where.join(' and ')}`
   const [linhas, total, responsaveis, eventosRg] = await Promise.all([
-    query(
-      `select f.*, ${FUP_PRAZO_SQL} as prazo from fup f ${sqlWhere}
-        order by (${FUP_PRAZO_SQL} = 'atraso') desc, f.valor desc nulls last limit ${porPagina} offset ${(pagina - 1) * porPagina}`,
-      valores,
-    ),
+    params.semLinhas
+      ? Promise.resolve([])
+      : query(
+          `select f.*, ${FUP_PRAZO_SQL} as prazo from fup f ${sqlWhere}
+            order by (${FUP_PRAZO_SQL} = 'atraso') desc, f.valor desc nulls last limit ${porPagina} offset ${(pagina - 1) * porPagina}`,
+          valores,
+        ),
     queryOne<{ total: number; valor: string }>(
       `select count(*)::int as total, coalesce(sum(valor), 0) as valor from fup f ${sqlWhere}`,
       valores,
@@ -274,7 +298,98 @@ export async function listarFup(params: {
   }
 }
 
-export async function listarAtivacao(params: { busca?: string; faixa?: string; pagina?: number }) {
+/** Faixas de atraso/antecedência da remessa (em dias, relativo a hoje). A ordem é a do eixo do gráfico. */
+export const FAIXAS_REMESSA = [
+  { rotulo: '> 180 d', grupo: 'atraso' },
+  { rotulo: '91–180 d', grupo: 'atraso' },
+  { rotulo: '31–90 d', grupo: 'atraso' },
+  { rotulo: '1–30 d', grupo: 'atraso' },
+  { rotulo: '0–30 d', grupo: 'prazo' },
+  { rotulo: '31–90 d', grupo: 'prazo' },
+  { rotulo: '> 90 d', grupo: 'prazo' },
+] as const
+
+/** Gráficos do follow-up, no mesmo recorte de filtros da lista. Pedidos entregues/eliminados ficam de fora. */
+export async function graficosFup(params: FiltroFup) {
+  const { sqlWhere, valores } = filtroFup(params)
+  const abertos = `${sqlWhere} and ${FUP_PRAZO_SQL} <> 'encerrado'`
+  const [faixas, fornecedores, retorno, diretorias, responsaveis] = await Promise.all([
+    query<{ faixa: number; itens: number; valor: string }>(
+      `select case when d < -180 then 0 when d < -90 then 1 when d < -30 then 2 when d < 0 then 3
+                   when d <= 30 then 4 when d <= 90 then 5 else 6 end as faixa,
+              count(*)::int as itens, coalesce(sum(valor), 0) as valor
+         from (select f.valor, coalesce(f.nova_data, f.data_remessa_corrigida) - current_date as d from fup f ${abertos}) x
+        where d is not null group by 1 order by 1`,
+      valores,
+    ),
+    query<{ fornecedor: string; itens: number; valor: string; sem_retorno: number }>(
+      `select coalesce(f.fornecedor, 'Sem fornecedor') as fornecedor, count(*)::int as itens, coalesce(sum(f.valor), 0) as valor,
+              count(*) filter (where not coalesce(f.retorno, false))::int as sem_retorno
+         from fup f ${sqlWhere} and ${FUP_PRAZO_SQL} = 'atraso'
+        group by 1 order by 3 desc nulls last limit 10`,
+      valores,
+    ),
+    queryOne<{ com_retorno: string; sem_retorno: string; cobrado_3x: string; itens_3x: number }>(
+      `select coalesce(sum(f.valor) filter (where f.retorno), 0) as com_retorno,
+              coalesce(sum(f.valor) filter (where not coalesce(f.retorno, false)), 0) as sem_retorno,
+              coalesce(sum(f.valor) filter (where not coalesce(f.retorno, false) and f.cobrancas >= 3), 0) as cobrado_3x,
+              count(*) filter (where not coalesce(f.retorno, false) and f.cobrancas >= 3)::int as itens_3x
+         from fup f ${abertos}`,
+      valores,
+    ),
+    query<{ diretoria: string; itens: number; valor: string; valor_atraso: string; valor_retorno: string }>(
+      `select coalesce(nullif(f.diretoria, ''), 'Sem diretoria') as diretoria, count(*)::int as itens, coalesce(sum(f.valor), 0) as valor,
+              coalesce(sum(f.valor) filter (where ${FUP_PRAZO_SQL} = 'atraso'), 0) as valor_atraso,
+              coalesce(sum(f.valor) filter (where f.retorno), 0) as valor_retorno
+         from fup f ${abertos} group by 1 order by 3 desc nulls last`,
+      valores,
+    ),
+    query<{ responsavel: string; itens: number; valor: string }>(
+      `select coalesce(f.responsavel, 'Não definido') as responsavel, count(*)::int as itens, coalesce(sum(f.valor), 0) as valor
+         from fup f ${abertos} group by 1 order by 3 desc nulls last limit 6`,
+      valores,
+    ),
+  ])
+  return {
+    faixas: FAIXAS_REMESSA.map((f, i) => {
+      const linha = faixas.find((x) => x.faixa === i)
+      return { ...f, itens: linha?.itens ?? 0, valor: Number(linha?.valor ?? 0) }
+    }),
+    fornecedores,
+    retorno: retorno!,
+    diretorias,
+    responsaveis,
+  }
+}
+
+/** Remessas da ativação ainda não entregues: atrasadas, mês a mês (6 meses) e depois. */
+export async function remessasAtivacao() {
+  const linhas = await query<{ mes: string; itens: number; valor: string }>(
+    `select case when data_remessa is null then 'sem'
+                 when data_remessa < current_date then 'atrasada'
+                 when data_remessa >= date_trunc('month', current_date) + interval '6 months' then 'depois'
+                 else to_char(data_remessa, 'YYYY-MM') end as mes,
+            count(*)::int as itens, coalesce(sum(valor * coalesce(qtd, 1)), 0) as valor
+       from ativacao where removido_em is null and coalesce(status_po, '') not ilike '%entregue%'
+      group by 1`,
+  )
+  const hoje = new Date()
+  const meses = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const pega = (chave: string) => linhas.find((l) => l.mes === chave)
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+  const nomeMes = (chave: string) => `${MESES[Number(chave.slice(5)) - 1]}/${chave.slice(2, 4)}`
+  return [
+    { chave: 'atrasada', rotulo: 'Atrasada', grupo: 'atraso' as const },
+    ...meses.map((m) => ({ chave: m, rotulo: nomeMes(m), grupo: 'prazo' as const })),
+    { chave: 'depois', rotulo: 'Depois', grupo: 'prazo' as const },
+    { chave: 'sem', rotulo: 'Sem data', grupo: 'sem' as const },
+  ].map((b) => ({ ...b, itens: pega(b.chave)?.itens ?? 0, valor: Number(pega(b.chave)?.valor ?? 0) }))
+}
+
+export async function listarAtivacao(params: { busca?: string; faixa?: string; mes?: string; pagina?: number }) {
   const where = ['removido_em is null']
   const valores: unknown[] = []
   if (params.busca?.trim()) {
@@ -283,6 +398,17 @@ export async function listarAtivacao(params: { busca?: string; faixa?: string; p
   }
   if (params.faixa === 'atraso') where.push("(status_po ilike '%atraso%' or faixa_atraso ilike '%entre%' or faixa_atraso ilike '%maior%' or faixa_atraso ilike '%menor%')")
   if (params.faixa === 'entregue') where.push("status_po ilike '%entregue%'")
+  // Clique numa coluna do gráfico de remessas (mesmos recortes de remessasAtivacao).
+  if (params.mes) {
+    where.push("coalesce(status_po, '') not ilike '%entregue%'")
+    if (params.mes === 'sem') where.push('data_remessa is null')
+    else if (params.mes === 'atrasada') where.push('data_remessa < current_date')
+    else if (params.mes === 'depois') where.push("data_remessa >= date_trunc('month', current_date) + interval '6 months'")
+    else if (/^\d{4}-\d{2}$/.test(params.mes)) {
+      valores.push(`${params.mes}-01`)
+      where.push(`data_remessa >= current_date and date_trunc('month', data_remessa) = $${valores.length}::date`)
+    }
+  }
   const porPagina = 50
   const pagina = params.pagina ?? 1
   const sqlWhere = `where ${where.join(' and ')}`
@@ -366,27 +492,28 @@ export async function alertas() {
   const cfg = await configuracoes()
   const [paradas, vencidas, recobrar, antecs, cancelaveis] = await Promise.all([
     query<OrdemResumo>(
-      `${ORDEM_SELECT} where ${ORDEM_PARADA_SQL} order by o.ultima_mudanca_em asc limit 200`,
+      `${ORDEM_SELECT} where ${ORDEM_PARADA_SQL} order by o.ultima_mudanca_em asc`,
       [cfg.diasSemMovimentacao, cfg.diasRecobranca],
     ),
     query<OrdemResumo>(
       `${ORDEM_SELECT} where o.itens_abertos > 0 and o.necessidade_mais_antiga < current_date - 7
-        and coalesce(a.situacao, 'sem_acao') <> 'resolvido' order by o.necessidade_mais_antiga asc limit 100`,
+        and coalesce(a.situacao, 'sem_acao') <> 'resolvido' order by o.necessidade_mais_antiga asc`,
     ),
     query<OrdemResumo>(
       `${ORDEM_SELECT} where a.situacao in ('cobrado', 'aguardando') and a.ultima_cobranca_em < now() - make_interval(days => $1::int)
-        and o.itens_abertos > 0 order by a.ultima_cobranca_em asc limit 100`,
+        and o.itens_abertos > 0 order by a.ultima_cobranca_em asc`,
       [cfg.diasRecobranca],
     ),
     listarAntecs(),
     query(
-      `select f.po_item, f.po, f.item_po, f.fornecedor, f.descricao, f.valor, f.cobrancas, f.ultima_cobranca_em
+      `select f.po_item, f.po, f.item_po, f.fornecedor, f.descricao, f.valor, f.cobrancas, f.ultima_cobranca_em, count(*) over()::int as total
          from fup f where f.removido_em is null and not coalesce(f.retorno, false) and f.cobrancas >= 3
           and ${FUP_PRAZO_SQL} <> 'encerrado' order by f.valor desc nulls last limit 100`,
     ),
   ])
   const antecsAtrasadas = antecs.filter((a) => prazoAntec(a)?.atrasada)
-  return { cfg, paradas, vencidas, recobrar, antecsAtrasadas, cancelaveis }
+  const totalCancelaveis = Number(cancelaveis[0]?.total ?? 0)
+  return { cfg, paradas, vencidas, recobrar, antecsAtrasadas, cancelaveis, totalCancelaveis }
 }
 
 export async function contarAlertas() {

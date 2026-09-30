@@ -50,7 +50,7 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
       </Link>
       <div className="mb-5">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="num text-xl font-semibold md:text-2xl">OM {o.ordem}</h1>
+          <h1 className="num text-xl font-semibold tracking-[-0.02em] md:text-2xl">OM {o.ordem}</h1>
           <SeloParada diasParada={o.dias_parada} limite={cfg.diasSemMovimentacao} abertos={o.itens_abertos} />
           <SeloSituacao situacao={o.situacao} />
         </div>
@@ -58,7 +58,7 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <section className="card grid grid-cols-2 gap-4 p-4 text-sm md:grid-cols-4">
             <Info rotulo="Itens abertos" valor={`${o.itens_abertos} de ${o.itens}`} />
             <Info rotulo="Valor (preço médio)" valor={moeda(o.valor)} />
@@ -66,8 +66,8 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
             <Info rotulo="Última mudança no SAP" valor={data(o.ultima_mudanca_em)} />
             <Info rotulo="Grupo planejamento" valor={o.grp_planejamento ?? '—'} />
             <Info rotulo="Local de instalação" valor={o.local_instalacao ?? '—'} className="col-span-2 md:col-span-3" />
-            <Info rotulo="Status usuário" valor={o.status_usuario ?? '—'} className="col-span-2" />
-            <Info rotulo="Status sistema" valor={o.status_sistema ?? '—'} className="col-span-2" />
+            <Info rotulo="Status usuário" valor={<Codigos texto={o.status_usuario} destaque />} className="col-span-2" />
+            <Info rotulo="Status sistema" valor={<Codigos texto={o.status_sistema} />} className="col-span-2" />
           </section>
 
           <Painel titulo="Itens de material" descricao={`${itens.length} itens na reserva`}>
@@ -115,7 +115,7 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {pode.editar(usuario) ? (
             <Painel titulo="Acompanhamento da Central" descricao={o.cobrancas ? `${o.cobrancas} cobrança(s) · última em ${dataHora(o.ultima_cobranca_em)}` : 'Nenhuma cobrança registrada.'}>
               <FormAcompanhamento ordem={o.ordem} situacao={o.situacao} setor={o.setor_responsavel} observacao={o.observacao} />
@@ -133,9 +133,10 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
 
           <Painel titulo="Histórico">
             {d.eventos.length ? (
-              <ol className="space-y-3">
+              <ol className="relative space-y-4 before:absolute before:top-1.5 before:bottom-1.5 before:left-[5px] before:w-px before:bg-line">
                 {d.eventos.map((e, idx) => (
-                  <li key={idx} className="border-l-2 border-line pl-3 text-sm">
+                  <li key={idx} className="relative pl-5 text-sm">
+                    <span className={`absolute top-1.5 left-0 size-[11px] rounded-full border-2 border-surface ${e.usuario ? 'bg-accent' : 'bg-deemph'}`} aria-hidden />
                     <div>{e.descricao}</div>
                     <div className="text-xs text-muted">{dataHora(e.criado_em)}{e.usuario ? ` · ${e.usuario}` : ' · importação SAP'}</div>
                   </li>
@@ -148,6 +149,21 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
         </div>
       </div>
     </>
+  )
+}
+
+/** Códigos do SAP separados em fichas (ex.: "ABER CAPC ERRD MatC"). */
+function Codigos({ texto, destaque }: { texto: string | null; destaque?: boolean }) {
+  const codigos = texto?.split(/\s+/).filter(Boolean) ?? []
+  if (!codigos.length) return <>—</>
+  return (
+    <span className="mt-0.5 flex flex-wrap gap-1">
+      {codigos.map((c, idx) => (
+        <span key={idx} className={`codigo rounded-md border px-1.5 py-px text-xs ${destaque ? 'border-accent/30 bg-brand-soft text-ink' : 'border-line bg-surface-2 text-ink-2'}`}>
+          {c}
+        </span>
+      ))}
+    </span>
   )
 }
 

@@ -60,11 +60,11 @@ export function Kpi({
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2 text-xs leading-snug font-medium text-muted">
           {Icone && (
-            <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2">
+            <span className="hidden size-6 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 sm:grid">
               <Icone className="size-3.5" aria-hidden />
             </span>
           )}
-          <span className="line-clamp-2">{rotulo}</span>
+          <span className="line-clamp-3 sm:line-clamp-2">{rotulo}</span>
         </span>
         {href && <ArrowUpRight className="size-3.5 shrink-0 text-muted opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />}
       </div>
@@ -92,7 +92,9 @@ export function Painel({
   children,
   className,
   corpo,
+  id,
 }: {
+  id?: string
   titulo: string
   descricao?: string
   acao?: React.ReactNode
@@ -102,7 +104,7 @@ export function Painel({
   corpo?: 'padrao' | 'tabela'
 }) {
   return (
-    <section className={cn('card min-w-0', corpo === 'tabela' ? 'overflow-hidden' : 'p-4 md:p-5', className)}>
+    <section id={id} className={cn('card min-w-0 scroll-mt-20', corpo === 'tabela' ? 'overflow-hidden' : 'p-4 md:p-5', className)}>
       <div className={cn('flex items-start justify-between gap-3', corpo === 'tabela' ? 'border-b border-line px-4 py-3.5 md:px-5' : 'mb-4')}>
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{titulo}</h2>
@@ -190,7 +192,7 @@ export function Composicao({ partes, formatar = (v) => v.toLocaleString('pt-BR')
           <div key={p.rotulo} className="h-full min-w-[3px] first:rounded-l-full last:rounded-r-full" style={{ width: `${(p.valor / total) * 100}%`, background: p.cor }} title={`${p.rotulo}: ${formatar(p.valor)}`} />
         ))}
       </div>
-      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+      <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-4 gap-y-2">
         {partes.map((p) => (
           <li key={p.rotulo} className="flex min-w-0 items-start gap-2 text-xs">
             <span className="mt-1 size-2 shrink-0 rounded-[3px]" style={{ background: p.cor }} aria-hidden />
@@ -248,6 +250,46 @@ export function Filtros({
               ativo ? 'border-transparent bg-ink text-surface' : 'border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink',
             )}
           >
+            {o.rotulo}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Abas de visão (lista/gráficos) que preservam os filtros da URL. */
+export function Abas({
+  base,
+  parametros,
+  chave,
+  opcoes,
+}: {
+  base: string
+  parametros: Record<string, string | undefined>
+  chave: string
+  opcoes: Array<{ valor: string; rotulo: string; icone?: LucideIcon }>
+}) {
+  const atual = parametros[chave] ?? ''
+  return (
+    <div className="inline-flex rounded-xl border border-line bg-surface-3 p-1" role="tablist">
+      {opcoes.map((o) => {
+        const p = new URLSearchParams(Object.entries(parametros).filter(([k, v]) => v && k !== chave && k !== 'pagina') as [string, string][])
+        if (o.valor) p.set(chave, o.valor)
+        const ativo = atual === o.valor
+        const Icone = o.icone
+        return (
+          <Link
+            key={o.valor}
+            href={`${base}${p.size ? `?${p}` : ''}`}
+            role="tab"
+            aria-selected={ativo}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium transition-colors',
+              ativo ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink',
+            )}
+          >
+            {Icone && <Icone className="size-4" aria-hidden />}
             {o.rotulo}
           </Link>
         )
