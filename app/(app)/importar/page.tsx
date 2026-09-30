@@ -24,14 +24,14 @@ export default async function PaginaImportar() {
     <>
       <Cabecalho titulo="Importar e exportar" descricao="Atualize o app com as exportações do SAP e leve os dados de volta para o Excel." />
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <Painel titulo="1. Importar planilha do SAP" descricao="Cole a exportação do SAP na planilha padrão (ou use o arquivo direto) e envie aqui. A tratativa feita no app é preservada.">
             <Importador />
           </Painel>
 
-          <Painel titulo="Histórico de importações">
+          <Painel titulo="Histórico de importações" corpo="tabela">
             {historico.length ? (
-              <div className="-mx-4 overflow-x-auto md:mx-0">
+              <div className="overflow-x-auto">
                 <table className="tabela">
                   <thead>
                     <tr><th>Quando</th><th>Base</th><th className="text-right">Linhas</th><th className="text-right">Novas</th><th className="text-right">Mudaram</th><th className="text-right">Saíram</th><th>Por</th></tr>
@@ -52,12 +52,12 @@ export default async function PaginaImportar() {
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-muted">Nenhuma importação ainda.</p>
+              <p className="px-4 py-4 text-sm text-muted md:px-5">Nenhuma importação ainda.</p>
             )}
           </Painel>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Painel titulo="2. Baixar para o Excel" descricao="Mesmas colunas da planilha original + colunas “APP” com o acompanhamento. Pode editar e reimportar.">
             <ul className="space-y-2">
               {LISTA_BASES.map((b) => (

@@ -366,27 +366,28 @@ export async function alertas() {
   const cfg = await configuracoes()
   const [paradas, vencidas, recobrar, antecs, cancelaveis] = await Promise.all([
     query<OrdemResumo>(
-      `${ORDEM_SELECT} where ${ORDEM_PARADA_SQL} order by o.ultima_mudanca_em asc limit 200`,
+      `${ORDEM_SELECT} where ${ORDEM_PARADA_SQL} order by o.ultima_mudanca_em asc`,
       [cfg.diasSemMovimentacao, cfg.diasRecobranca],
     ),
     query<OrdemResumo>(
       `${ORDEM_SELECT} where o.itens_abertos > 0 and o.necessidade_mais_antiga < current_date - 7
-        and coalesce(a.situacao, 'sem_acao') <> 'resolvido' order by o.necessidade_mais_antiga asc limit 100`,
+        and coalesce(a.situacao, 'sem_acao') <> 'resolvido' order by o.necessidade_mais_antiga asc`,
     ),
     query<OrdemResumo>(
       `${ORDEM_SELECT} where a.situacao in ('cobrado', 'aguardando') and a.ultima_cobranca_em < now() - make_interval(days => $1::int)
-        and o.itens_abertos > 0 order by a.ultima_cobranca_em asc limit 100`,
+        and o.itens_abertos > 0 order by a.ultima_cobranca_em asc`,
       [cfg.diasRecobranca],
     ),
     listarAntecs(),
     query(
-      `select f.po_item, f.po, f.item_po, f.fornecedor, f.descricao, f.valor, f.cobrancas, f.ultima_cobranca_em
+      `select f.po_item, f.po, f.item_po, f.fornecedor, f.descricao, f.valor, f.cobrancas, f.ultima_cobranca_em, count(*) over()::int as total
          from fup f where f.removido_em is null and not coalesce(f.retorno, false) and f.cobrancas >= 3
           and ${FUP_PRAZO_SQL} <> 'encerrado' order by f.valor desc nulls last limit 100`,
     ),
   ])
   const antecsAtrasadas = antecs.filter((a) => prazoAntec(a)?.atrasada)
-  return { cfg, paradas, vencidas, recobrar, antecsAtrasadas, cancelaveis }
+  const totalCancelaveis = Number(cancelaveis[0]?.total ?? 0)
+  return { cfg, paradas, vencidas, recobrar, antecsAtrasadas, cancelaveis, totalCancelaveis }
 }
 
 export async function contarAlertas() {

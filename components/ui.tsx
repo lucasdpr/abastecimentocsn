@@ -60,11 +60,11 @@ export function Kpi({
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2 text-xs leading-snug font-medium text-muted">
           {Icone && (
-            <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2">
+            <span className="hidden size-6 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 sm:grid">
               <Icone className="size-3.5" aria-hidden />
             </span>
           )}
-          <span className="line-clamp-2">{rotulo}</span>
+          <span className="line-clamp-3 sm:line-clamp-2">{rotulo}</span>
         </span>
         {href && <ArrowUpRight className="size-3.5 shrink-0 text-muted opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />}
       </div>
@@ -92,7 +92,9 @@ export function Painel({
   children,
   className,
   corpo,
+  id,
 }: {
+  id?: string
   titulo: string
   descricao?: string
   acao?: React.ReactNode
@@ -102,7 +104,7 @@ export function Painel({
   corpo?: 'padrao' | 'tabela'
 }) {
   return (
-    <section className={cn('card min-w-0', corpo === 'tabela' ? 'overflow-hidden' : 'p-4 md:p-5', className)}>
+    <section id={id} className={cn('card min-w-0 scroll-mt-20', corpo === 'tabela' ? 'overflow-hidden' : 'p-4 md:p-5', className)}>
       <div className={cn('flex items-start justify-between gap-3', corpo === 'tabela' ? 'border-b border-line px-4 py-3.5 md:px-5' : 'mb-4')}>
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{titulo}</h2>

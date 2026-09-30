@@ -1,4 +1,4 @@
-import { Megaphone } from 'lucide-react'
+import { ChevronDown, Megaphone } from 'lucide-react'
 import { cobrarFornecedor } from '@/app/acoes'
 import { FormFup } from '@/components/form-fup'
 import { SeletorFiltro } from '@/components/seletor-filtro'
@@ -6,8 +6,12 @@ import { Busca, Cabecalho, Filtros, Paginacao, Painel, Selo, Vazio } from '@/com
 import { exigirUsuario, pode } from '@/lib/auth'
 import { listarFup } from '@/lib/consultas'
 import { data, moeda, moedaCurta, numero } from '@/lib/formato'
+import { cn } from '@/lib/utils'
 
 export const metadata = { title: 'Follow-up' }
+
+/** Colunas da lista no desktop (cabeçalho e linhas precisam bater). */
+const COLUNAS = 'grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)_7.5rem_9rem_6rem_1rem] gap-4'
 
 type Params = { busca?: string; prazo?: string; retorno?: string; responsavel?: string; evento?: string; pagina?: string }
 
@@ -94,32 +98,71 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
       {!linhas.length ? (
         <Vazio texto="Nenhum item de follow-up neste filtro." />
       ) : (
-        <ul className="space-y-2">
-          {linhas.map((f) => (
-            <li key={f.po_item} className="card">
+        <div className="card overflow-hidden">
+          <div className={cn(COLUNAS, 'hidden border-b border-line bg-surface-2 px-4 py-2.5 text-xs font-medium text-muted md:grid')}>
+            <span>Pedido</span>
+            <span>Material · fornecedor</span>
+            <span>Remessa</span>
+            <span>Responsável</span>
+            <span className="text-right">Valor</span>
+            <span />
+          </div>
+          <ul className="divide-y divide-line">
+          {linhas.map((f) => {
+            const selos = (
+              <>
+                {f.prazo === 'atraso' && <Selo tom="critico">Atraso</Selo>}
+                {f.prazo === 'no_prazo' && <Selo tom="bom">No prazo</Selo>}
+                {f.prazo === 'encerrado' && <Selo tom="neutro" icone={false}>{f.status_sap}</Selo>}
+                {f.retorno ? <Selo tom="info">Com retorno</Selo> : <Selo tom="alerta">Sem retorno</Selo>}
+                {f.evento === 'RG' && <Selo tom="neutro" icone={false}>{f.descricao_evento || 'RG'}</Selo>}
+              </>
+            )
+            const remessa = `${data(f.nova_data ?? f.data_remessa_corrigida)}${f.nova_data ? ' (nova)' : ''}`
+            return (
+            <li key={f.po_item}>
               <details className="group">
-                <summary className="flex cursor-pointer list-none items-start gap-3 p-3.5 md:p-4 [&::-webkit-details-marker]:hidden">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="num text-sm font-semibold">PO {f.po}/{f.item_po}</span>
-                      {f.prazo === 'atraso' && <Selo tom="critico">Atraso</Selo>}
-                      {f.prazo === 'no_prazo' && <Selo tom="bom">No prazo</Selo>}
-                      {f.prazo === 'encerrado' && <Selo tom="neutro" icone={false}>{f.status_sap}</Selo>}
-                      {f.retorno ? <Selo tom="info">Com retorno</Selo> : <Selo tom="alerta">Sem retorno</Selo>}
-                      {f.evento === 'RG' && <Selo tom="neutro" icone={false}>{f.descricao_evento || 'RG'}</Selo>}
-                    </div>
-                    <div className="mt-1 truncate text-sm text-ink-2">{f.descricao}</div>
-                    <div className="num mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
-                      <span>{f.fornecedor}</span>
-                      <span>Remessa {data(f.nova_data ?? f.data_remessa_corrigida)}{f.nova_data ? ' (nova)' : ''}</span>
-                      {f.responsavel && <span>Resp.: {f.responsavel}</span>}
-                      {f.gg && <span>{f.gg} · {f.diretoria}</span>}
-                      {f.cobrancas > 0 && <span>{f.cobrancas} cobrança(s)</span>}
+                <summary className="cursor-pointer list-none transition-colors hover:bg-surface-2 group-open:bg-surface-2 [&::-webkit-details-marker]:hidden">
+                  {/* Mobile */}
+                  <div className="flex items-start gap-3 px-4 py-3.5 md:hidden">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="codigo text-sm font-semibold">PO {f.po}/{f.item_po}</span>
+                        <span className="num shrink-0 text-sm font-semibold">{moedaCurta(f.valor)}</span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">{selos}</div>
+                      <div className="mt-1.5 truncate text-sm text-ink-2">{f.descricao}</div>
+                      <div className="num mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
+                        <span className="max-w-full truncate">{f.fornecedor}</span>
+                        <span>Remessa {remessa}</span>
+                        {f.responsavel && <span>Resp.: {f.responsavel}</span>}
+                        {f.cobrancas > 0 && <span>{f.cobrancas} cobrança(s)</span>}
+                      </div>
                     </div>
                   </div>
-                  <div className="num shrink-0 text-right text-sm font-semibold">{moedaCurta(f.valor)}</div>
+                  {/* Desktop */}
+                  <div className={cn(COLUNAS, 'hidden items-center px-4 py-3 md:grid')}>
+                    <div className="min-w-0">
+                      <div className="codigo font-semibold text-ink">PO {f.po}/{f.item_po}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">{selos}</div>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-ink">{f.descricao}</div>
+                      <div className="truncate text-xs text-muted">
+                        {f.fornecedor}
+                        {f.gg && ` · ${f.gg} · ${f.diretoria}`}
+                      </div>
+                    </div>
+                    <div className="num text-sm text-ink-2">{remessa}</div>
+                    <div className="min-w-0 text-sm text-ink-2">
+                      <div className="truncate">{f.responsavel ?? '—'}</div>
+                      {f.cobrancas > 0 && <div className="text-xs text-muted">{f.cobrancas} cobrança(s)</div>}
+                    </div>
+                    <div className="num text-right text-sm font-semibold text-ink">{moedaCurta(f.valor)}</div>
+                    <ChevronDown className="size-4 text-muted transition-transform group-open:rotate-180" aria-hidden />
+                  </div>
                 </summary>
-                <div className="border-t border-line px-3.5 pb-4 md:px-4">
+                <div className="border-t border-line bg-surface-2/60 px-4 pb-4">
                   {f.obs_fornecedor && <p className="mt-3 rounded-lg bg-surface-2 p-3 text-sm text-ink-2">{f.obs_fornecedor}</p>}
                   {editar ? (
                     <>
@@ -134,8 +177,10 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
                 </div>
               </details>
             </li>
-          ))}
-        </ul>
+            )
+          })}
+          </ul>
+        </div>
       )}
       <Paginacao base="/fup" parametros={parametros} pagina={pagina} total={r.total} porPagina={r.porPagina} />
     </>
