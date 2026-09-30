@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { X } from 'lucide-react'
 import { FormStatusAtivacao } from '@/components/form-status-ativacao'
 import { GraficoColunas } from '@/components/graficos'
 import { Barras, Busca, Cabecalho, Filtros, Paginacao, Painel, Selo, Vazio } from '@/components/ui'
@@ -8,16 +9,18 @@ import { data, moeda, moedaCurta, numero } from '@/lib/formato'
 
 export const metadata = { title: 'Ativação' }
 
-type Params = { busca?: string; faixa?: string; pagina?: string }
+type Params = { busca?: string; faixa?: string; mes?: string; pagina?: string }
 
 export default async function PaginaAtivacao({ searchParams }: { searchParams: Promise<Params> }) {
   const usuario = await exigirUsuario(pode.verGestao)
   const sp = await searchParams
   const pagina = Math.max(1, Number(sp.pagina) || 1)
-  const [r, remessas] = await Promise.all([listarAtivacao({ busca: sp.busca, faixa: sp.faixa, pagina }), remessasAtivacao()])
+  const [r, remessas] = await Promise.all([listarAtivacao({ busca: sp.busca, faixa: sp.faixa, mes: sp.mes, pagina }), remessasAtivacao()])
   const editar = pode.editar(usuario)
   const atrasadas = remessas.find((m) => m.chave === 'atrasada')
-  const parametros = { busca: sp.busca, faixa: sp.faixa }
+  const parametros = { busca: sp.busca, faixa: sp.faixa, mes: sp.mes }
+  const mesAtivo = remessas.find((m) => m.chave === sp.mes)
+  const semMes = new URLSearchParams(Object.entries({ busca: sp.busca, faixa: sp.faixa }).filter(([, v]) => v) as [string, string][])
 
   return (
     <>
@@ -32,6 +35,7 @@ export default async function PaginaAtivacao({ searchParams }: { searchParams: P
             dados={remessas}
             legendas={{ atraso: 'Remessa vencida', prazo: 'Remessa prevista' }}
             descricao="Gráfico de colunas: valor dos itens de ativação por mês de remessa"
+            links={remessas.map((m) => `/ativacao?${new URLSearchParams({ mes: m.chave })}#lista`)}
           />
         </Painel>
         <Painel titulo="Itens por status do PO" descricao="Status informado pelo fornecedor.">
@@ -40,14 +44,23 @@ export default async function PaginaAtivacao({ searchParams }: { searchParams: P
       </div>
 
       <div className="mb-4 space-y-3">
-        <Busca placeholder="PO, RM, ordem, fornecedor, material…" valor={sp.busca} ocultos={{ faixa: sp.faixa }} />
+        <Busca placeholder="PO, RM, ordem, fornecedor, material…" valor={sp.busca} ocultos={{ faixa: sp.faixa, mes: sp.mes }} />
         <Filtros base="/ativacao" parametros={parametros} chave="faixa" opcoes={[
           { valor: '', rotulo: 'Todos' },
           { valor: 'atraso', rotulo: 'Em atraso' },
           { valor: 'entregue', rotulo: 'Entregues' },
         ]} />
       </div>
-      <p className="mb-2 text-xs text-muted">{numero(r.total)} itens · {moeda(r.valor)}</p>
+      {mesAtivo && (
+        <Link
+          href={`/ativacao${semMes.size ? `?${semMes}` : ''}`}
+          className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-brand-soft py-1 pr-2 pl-3 text-xs font-medium text-ink hover:border-accent"
+        >
+          Remessa: {mesAtivo.rotulo} (não entregues)
+          <X className="size-3.5 text-muted" aria-label="Remover filtro" />
+        </Link>
+      )}
+      <p id="lista" className="mb-2 scroll-mt-20 text-xs text-muted">{numero(r.total)} itens · {moeda(r.valor)}</p>
       {!r.linhas.length ? (
         <Vazio texto="Nenhum item de ativação neste filtro." />
       ) : (

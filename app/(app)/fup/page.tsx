@@ -1,12 +1,12 @@
 import Link from 'next/link'
-import { ChartColumn, ChevronDown, List, Megaphone } from 'lucide-react'
+import { ChartColumn, ChevronDown, List, Megaphone, X } from 'lucide-react'
 import { cobrarFornecedor } from '@/app/acoes'
 import { FormFup } from '@/components/form-fup'
 import { SeletorFiltro } from '@/components/seletor-filtro'
 import { GraficoColunas } from '@/components/graficos'
 import { Abas, Barras, Busca, Cabecalho, Composicao, Filtros, Medidor, Paginacao, Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { graficosFup, listarFup } from '@/lib/consultas'
+import { FAIXAS_REMESSA, graficosFup, listarFup } from '@/lib/consultas'
 import { data, moeda, moedaCurta, numero } from '@/lib/formato'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +15,7 @@ export const metadata = { title: 'Follow-up' }
 /** Colunas da lista no desktop (cabeçalho e linhas precisam bater). */
 const COLUNAS = 'grid-cols-[minmax(11rem,14rem)_minmax(0,1fr)_7.5rem_9rem_6rem_1rem] gap-4'
 
-type Params = { busca?: string; prazo?: string; retorno?: string; responsavel?: string; evento?: string; pagina?: string; aba?: string }
+type Params = { busca?: string; prazo?: string; retorno?: string; responsavel?: string; evento?: string; pagina?: string; aba?: string; remessa?: string; diretoria?: string }
 
 type Linha = {
   po_item: string
@@ -49,7 +49,7 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
   const verGraficos = sp.aba === 'graficos'
   const [r, g] = await Promise.all([listarFup({ ...sp, pagina, semLinhas: verGraficos }), verGraficos ? graficosFup(sp) : null])
   const linhas = r.linhas as Linha[]
-  const parametros = { busca: sp.busca, prazo: sp.prazo, retorno: sp.retorno, responsavel: sp.responsavel, evento: sp.evento, aba: sp.aba }
+  const parametros = { busca: sp.busca, prazo: sp.prazo, retorno: sp.retorno, responsavel: sp.responsavel, evento: sp.evento, aba: sp.aba, remessa: sp.remessa, diretoria: sp.diretoria }
   const editar = pode.editar(usuario)
 
   return (
@@ -110,10 +110,21 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
         </Painel>
       )}
 
+      {(sp.remessa || sp.diretoria) && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {sp.remessa && FAIXAS_REMESSA[Number(sp.remessa)] && (
+            <FiltroAtivo
+              rotulo={`Remessa: ${FAIXAS_REMESSA[Number(sp.remessa)].grupo === 'atraso' ? 'atrasado há' : 'vence em'} ${FAIXAS_REMESSA[Number(sp.remessa)].rotulo}`}
+              href={linkSem(parametros, 'remessa')}
+            />
+          )}
+          {sp.diretoria && <FiltroAtivo rotulo={`Diretoria: ${sp.diretoria}`} href={linkSem(parametros, 'diretoria')} />}
+        </div>
+      )}
       <p className="mb-2 text-xs text-muted">{numero(r.total)} itens · {moeda(r.valor)}</p>
 
       {g ? (
-        <GraficosFup g={g} />
+        <GraficosFup g={g} parametros={parametros} />
       ) : !linhas.length ? (
         <Vazio texto="Nenhum item de follow-up neste filtro." />
       ) : (
@@ -206,7 +217,14 @@ export default async function PaginaFup({ searchParams }: { searchParams: Promis
   )
 }
 
-function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
+/** Link para a lista com os filtros atuais + o recorte clicado no gráfico. */
+function linkLista(parametros: Record<string, string | undefined>, extra: Record<string, string>) {
+  const todos: Record<string, string | undefined> = { ...parametros, aba: undefined, ...extra }
+  const p = new URLSearchParams(Object.entries(todos).filter(([, v]) => v) as [string, string][])
+  return `/fup?${p}`
+}
+
+function GraficosFup({ g, parametros }: { g: Awaited<ReturnType<typeof graficosFup>>; parametros: Record<string, string | undefined> }) {
   const aberto = Number(g.retorno.com_retorno) + Number(g.retorno.sem_retorno)
   const atrasado = g.faixas.filter((f) => f.grupo === 'atraso').reduce((s, f) => s + f.valor, 0)
   return (
@@ -221,6 +239,7 @@ function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
             dados={g.faixas}
             legendas={{ atraso: 'Atrasado há', prazo: 'Vence em' }}
             preencher
+            links={g.faixas.map((_, i) => linkLista(parametros, { remessa: String(i) }))}
             descricao="Gráfico de colunas: valor em aberto por faixa de dias de atraso ou até a remessa"
           />
         </Painel>
@@ -251,7 +270,7 @@ function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
           <Painel titulo="Com quem está a pendência" descricao="Valor em aberto por responsável." className="flex-1">
             <Barras
               formatar={moedaCurta}
-              itens={g.responsaveis.map((x) => ({ rotulo: x.responsavel, valor: Number(x.valor), detalhe: `${numero(x.itens)} itens` }))}
+              itens={g.responsaveis.map((x) => ({ rotulo: x.responsavel, valor: Number(x.valor), detalhe: `${numero(x.itens)} itens`, href: linkLista(parametros, { responsavel: x.responsavel }) }))}
             />
           </Painel>
         </div>
@@ -266,7 +285,7 @@ function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
               rotulo: f.fornecedor,
               valor: Number(f.valor),
               detalhe: `${numero(f.itens)} itens · ${f.sem_retorno === f.itens ? 'nenhum com retorno' : `${numero(f.sem_retorno)} sem retorno`}`,
-              href: `/fup?${new URLSearchParams({ busca: f.fornecedor, prazo: 'atraso' })}`,
+              href: linkLista(parametros, { busca: f.fornecedor, prazo: 'atraso' }),
             }))}
           />
         </Painel>
@@ -286,7 +305,11 @@ function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
                 <tbody>
                   {g.diretorias.map((d) => (
                     <tr key={d.diretoria}>
-                      <td className="font-medium">{d.diretoria}</td>
+                      <td className="font-medium">
+                        <Link href={linkLista(parametros, { diretoria: d.diretoria })} className="text-accent hover:underline">
+                          {d.diretoria}
+                        </Link>
+                      </td>
                       <td className="num text-right">{numero(d.itens)}</td>
                       <td className="num text-right whitespace-nowrap">{moedaCurta(d.valor)}</td>
                       <td>
@@ -306,5 +329,20 @@ function GraficosFup({ g }: { g: Awaited<ReturnType<typeof graficosFup>> }) {
         </Painel>
       </div>
     </div>
+  )
+}
+
+function linkSem(parametros: Record<string, string | undefined>, chave: string) {
+  const p = new URLSearchParams(Object.entries(parametros).filter(([k, v]) => v && k !== chave) as [string, string][])
+  return `/fup${p.size ? `?${p}` : ''}`
+}
+
+/** Filtro vindo de um clique no gráfico, com X para remover. */
+function FiltroAtivo({ rotulo, href }: { rotulo: string; href: string }) {
+  return (
+    <Link href={href} className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-brand-soft py-1 pr-2 pl-3 text-xs font-medium text-ink hover:border-accent">
+      {rotulo}
+      <X className="size-3.5 text-muted" aria-label="Remover filtro" />
+    </Link>
   )
 }

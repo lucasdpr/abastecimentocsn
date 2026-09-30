@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { moeda, moedaCurta, numero } from '@/lib/formato'
@@ -13,7 +14,7 @@ const GRUPOS = {
 
 type Coluna = { rotulo: string; grupo: keyof typeof GRUPOS; valor: number; itens: number }
 
-function DicaColuna({ active, payload, legendas }: { active?: boolean; payload?: Array<{ payload?: Coluna }>; legendas: Partial<Record<keyof typeof GRUPOS, string>> }) {
+function DicaColuna({ active, payload, legendas, clicavel }: { active?: boolean; payload?: Array<{ payload?: Coluna }>; legendas: Partial<Record<keyof typeof GRUPOS, string>>; clicavel?: boolean }) {
   const c = payload?.[0]?.payload
   if (!active || !c) return null
   return (
@@ -25,6 +26,7 @@ function DicaColuna({ active, payload, legendas }: { active?: boolean; payload?:
       <p className="num text-ink-2">
         <span className="font-semibold text-ink">{moeda(c.valor)}</span> · {numero(c.itens)} itens
       </p>
+      {clicavel && c.itens > 0 && <p className="mt-1 text-[11px] text-accent">Clique para ver os itens</p>}
     </div>
   )
 }
@@ -38,8 +40,11 @@ export function GraficoColunas({
   legendas = {},
   descricao,
   preencher,
+  links,
 }: {
   dados: Coluna[]
+  /** Destino ao clicar em cada coluna (mesma ordem de `dados`): abre a lista daquele recorte. */
+  links?: string[]
   /** Cresce para ocupar a altura do cartão (quando o vizinho no grid é mais alto). */
   preencher?: boolean
   /** Nome de cada grupo na legenda (ex.: "Atrasado há", "Vence em"). */
@@ -49,6 +54,7 @@ export function GraficoColunas({
   const grupos = (Object.keys(GRUPOS) as Array<keyof typeof GRUPOS>).filter((g) => dados.some((d) => d.grupo === g))
   // Com pouca largura por coluna (celular), os rótulos do eixo se sobrepõem: inclina.
   const [largura, setLargura] = useState(0)
+  const router = useRouter()
   const inclinar = largura > 0 && (largura - 48) / dados.length < 52
   if (!dados.some((d) => d.valor || d.itens)) return <p className="py-8 text-center text-sm text-muted">Nada neste recorte.</p>
   return (
@@ -75,8 +81,14 @@ export function GraficoColunas({
               height={inclinar ? 46 : 30}
             />
             <YAxis tickLine={false} axisLine={false} width={48} tick={{ fontSize: 11, fill: 'var(--muted)' }} tickFormatter={(v) => moedaCurta(v).replace('R$ ', '')} />
-            <Tooltip cursor={{ fill: 'var(--grid)', opacity: 0.6 }} content={<DicaColuna legendas={legendas} />} />
-            <Bar dataKey="valor" radius={[4, 4, 0, 0]} maxBarSize={44}>
+            <Tooltip cursor={{ fill: 'var(--grid)', opacity: 0.6 }} content={<DicaColuna legendas={legendas} clicavel={!!links} />} />
+            <Bar
+              dataKey="valor"
+              radius={[4, 4, 0, 0]}
+              maxBarSize={44}
+              className={links ? 'cursor-pointer' : undefined}
+              onClick={(_, i) => links?.[i] && router.push(links[i])}
+            >
               {dados.map((d, i) => (
                 <Cell key={i} fill={GRUPOS[d.grupo].cor} />
               ))}
@@ -99,7 +111,13 @@ export function GraficoColunas({
               {dados.map((d, i) => (
                 <tr key={i}>
                   <td>
-                    {legendas[d.grupo] ?? GRUPOS[d.grupo].nome} · {d.rotulo}
+                    {links?.[i] ? (
+                      <a href={links[i]} className="text-accent hover:underline">
+                        {legendas[d.grupo] ?? GRUPOS[d.grupo].nome} · {d.rotulo}
+                      </a>
+                    ) : (
+                      <>{legendas[d.grupo] ?? GRUPOS[d.grupo].nome} · {d.rotulo}</>
+                    )}
                   </td>
                   <td className="num text-right">{numero(d.itens)}</td>
                   <td className="num text-right">{moeda(d.valor)}</td>

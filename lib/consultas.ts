@@ -222,7 +222,15 @@ type FiltroFup = {
   retorno?: string
   responsavel?: string
   evento?: string
+  /** Índice em FAIXAS_REMESSA (clique numa coluna do gráfico). */
+  remessa?: string
+  diretoria?: string
 }
+
+/** Limites (em dias até a remessa) de cada faixa de FAIXAS_REMESSA. */
+const LIMITES_REMESSA: Array<[number | null, number | null]> = [
+  [null, -181], [-180, -91], [-90, -31], [-30, -1], [0, 30], [31, 90], [91, null],
+]
 
 /** WHERE da tela de follow-up: a lista e os gráficos usam exatamente o mesmo recorte. */
 function filtroFup(params: FiltroFup) {
@@ -243,6 +251,14 @@ function filtroFup(params: FiltroFup) {
   if (params.retorno === 'cancelavel') where.push(`not coalesce(f.retorno, false) and f.cobrancas >= 3 and ${FUP_PRAZO_SQL} <> 'encerrado'`)
   if (params.responsavel) add('coalesce(f.responsavel, \'Não definido\') = ?', params.responsavel)
   if (params.evento === 'rg') where.push("f.evento = 'RG'")
+  const limites = params.remessa ? LIMITES_REMESSA[Number(params.remessa)] : undefined
+  if (limites) {
+    const d = 'coalesce(f.nova_data, f.data_remessa_corrigida) - current_date'
+    where.push(`${FUP_PRAZO_SQL} <> 'encerrado' and ${d} is not null`)
+    if (limites[0] != null) where.push(`${d} >= ${limites[0]}`)
+    if (limites[1] != null) where.push(`${d} <= ${limites[1]}`)
+  }
+  if (params.diretoria) add("coalesce(nullif(f.diretoria, ''), 'Sem diretoria') = ?", params.diretoria)
   return { sqlWhere: `where ${where.join(' and ')}`, valores }
 }
 
@@ -373,7 +389,7 @@ export async function remessasAtivacao() {
   ].map((b) => ({ ...b, itens: pega(b.chave)?.itens ?? 0, valor: Number(pega(b.chave)?.valor ?? 0) }))
 }
 
-export async function listarAtivacao(params: { busca?: string; faixa?: string; pagina?: number }) {
+export async function listarAtivacao(params: { busca?: string; faixa?: string; mes?: string; pagina?: number }) {
   const where = ['removido_em is null']
   const valores: unknown[] = []
   if (params.busca?.trim()) {
@@ -382,6 +398,17 @@ export async function listarAtivacao(params: { busca?: string; faixa?: string; p
   }
   if (params.faixa === 'atraso') where.push("(status_po ilike '%atraso%' or faixa_atraso ilike '%entre%' or faixa_atraso ilike '%maior%' or faixa_atraso ilike '%menor%')")
   if (params.faixa === 'entregue') where.push("status_po ilike '%entregue%'")
+  // Clique numa coluna do gráfico de remessas (mesmos recortes de remessasAtivacao).
+  if (params.mes) {
+    where.push("coalesce(status_po, '') not ilike '%entregue%'")
+    if (params.mes === 'sem') where.push('data_remessa is null')
+    else if (params.mes === 'atrasada') where.push('data_remessa < current_date')
+    else if (params.mes === 'depois') where.push("data_remessa >= date_trunc('month', current_date) + interval '6 months'")
+    else if (/^\d{4}-\d{2}$/.test(params.mes)) {
+      valores.push(`${params.mes}-01`)
+      where.push(`data_remessa >= current_date and date_trunc('month', data_remessa) = $${valores.length}::date`)
+    }
+  }
   const porPagina = 50
   const pagina = params.pagina ?? 1
   const sqlWhere = `where ${where.join(' and ')}`
