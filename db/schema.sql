@@ -251,6 +251,10 @@ create table if not exists eventos (
 );
 create index if not exists eventos_chave_idx on eventos (entidade, chave, criado_em desc);
 
+-- Cada mudança detectada fica ligada à importação que a trouxe (tela "O que mudou").
+alter table eventos add column if not exists importacao_id int references importacoes(id) on delete set null;
+create index if not exists eventos_importacao_idx on eventos (importacao_id, tipo);
+
 -- Visão por ordem (agrega os itens).
 create or replace view ordens as
 with i as (

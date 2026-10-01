@@ -1,10 +1,12 @@
+import Link from 'next/link'
 import { headers } from 'next/headers'
 import { Download } from 'lucide-react'
 import { Importador } from '@/components/importador'
-import { Cabecalho, Painel, Selo } from '@/components/ui'
+import { AvisoAtualizacao, Cabecalho, Painel, Selo } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
 import { LISTA_BASES, BASES, type BaseId } from '@/lib/bases'
 import { query } from '@/lib/db'
+import { statusAtualizacao } from '@/lib/consultas'
 import { dataHora, numero } from '@/lib/formato'
 
 export const metadata = { title: 'Importar / Excel' }
@@ -16,6 +18,7 @@ export default async function PaginaImportar() {
   }>(
     `select i.*, u.nome as usuario from importacoes i left join usuarios u on u.id = i.usuario_id order by i.iniciado_em desc limit 20`,
   )
+  const status = await statusAtualizacao()
   const h = await headers()
   const origem = `${h.get('x-forwarded-proto') ?? 'https'}://${h.get('host')}`
   const temToken = (process.env.EXPORT_TOKEN ?? '').length >= 16
@@ -23,13 +26,16 @@ export default async function PaginaImportar() {
   return (
     <>
       <Cabecalho titulo="Importar e exportar" descricao="Atualize o app com as exportações do SAP e leve os dados de volta para o Excel." />
+      <AvisoAtualizacao
+        bases={status.filter((x) => x.atrasada).map((x) => ({ nome: BASES[x.base as BaseId]?.nome ?? x.base, atualizadoEm: dataHora(x.concluido_em), diasUteis: x.diasUteis }))}
+      />
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="min-w-0 space-y-4 lg:col-span-2">
           <Painel titulo="1. Importar planilha do SAP" descricao="Cole a exportação do SAP na planilha padrão (ou use o arquivo direto) e envie aqui. A tratativa feita no app é preservada.">
             <Importador />
           </Painel>
 
-          <Painel titulo="Histórico de importações" corpo="tabela">
+          <Painel titulo="Histórico de importações" descricao="Clique na data para ver o que mudou em cada importação." corpo="tabela">
             {historico.length ? (
               <div className="overflow-x-auto">
                 <table className="tabela">
@@ -39,7 +45,12 @@ export default async function PaginaImportar() {
                   <tbody>
                     {historico.map((i) => (
                       <tr key={i.id}>
-                        <td className="whitespace-nowrap">{dataHora(i.iniciado_em)} {i.status !== 'concluida' && <Selo tom="alerta">incompleta</Selo>}</td>
+                        <td className="whitespace-nowrap">
+                          <Link href={`/importar/${i.id}`} className="font-medium text-accent hover:underline" title="Ver o que mudou nesta importação">
+                            {dataHora(i.iniciado_em)}
+                          </Link>{' '}
+                          {i.status !== 'concluida' && <Selo tom="alerta">incompleta</Selo>}
+                        </td>
                         <td className="whitespace-nowrap" title={i.arquivo}>{BASES[i.base]?.nome ?? i.base}</td>
                         <td className="num text-right">{numero(i.linhas)}</td>
                         <td className="num text-right">{numero(i.novas)}</td>

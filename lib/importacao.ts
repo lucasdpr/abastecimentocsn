@@ -6,10 +6,16 @@ import { pool, query, queryOne } from './db'
 
 const TIPO_SQL = { texto: 'text', codigo: 'text', numero: 'numeric', inteiro: 'int', data: 'date', flag: 'boolean', simnao: 'boolean' } as const
 
-/** Campos acompanhados no histórico quando mudam de uma importação para outra. */
+/**
+ * Nomes amigáveis no histórico. Todos os campos vindos da planilha são acompanhados
+ * (qualquer coisa que o SAP mudar aparece em "O que mudou"); aqui só se ajusta o rótulo.
+ */
 const CAMPOS_HISTORICO: Partial<Record<BaseId, Record<string, string>>> = {
   ordens: {
     status_item: 'Status do item',
+    norma_apropriacao: 'Coletor de custo',
+    qtd: 'Qtd. necessária',
+    data_necessidade: 'Data da necessidade',
     status_aprovacao: 'Status aprovação',
     status_usuario: 'Status usuário',
     status_sistema: 'Status sistema',
@@ -27,6 +33,23 @@ const ENTIDADE_EVENTO: Record<BaseId, (r: Record<string, unknown>) => { entidade
   reservas: (r) => ({ entidade: 'reserva', chave: `${r.reserva}-${r.item}` }),
 }
 
+let colunaGarantida: Promise<unknown> | null = null
+/** Garante a coluna que liga o evento à importação (idempotente; evita quebrar se o banco ainda não foi migrado). */
+export function garantirEsquemaEventos() {
+  // Consulta antes de alterar: "alter table" trava a tabela mesmo quando a coluna já existe.
+  colunaGarantida ??= queryOne(
+    "select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'eventos' and column_name = 'importacao_id'",
+  )
+    .then((existe) =>
+      existe ? null : query('alter table eventos add column if not exists importacao_id int references importacoes(id) on delete set null'),
+    )
+    .catch((erro) => {
+      colunaGarantida = null
+      throw erro
+    })
+  return colunaGarantida
+}
+
 const camposTabela = (base: Base) => base.campos.filter((c) => !c.app)
 
 function hashRegistro(base: Base, registro: Record<string, unknown>) {
@@ -34,8 +57,20 @@ function hashRegistro(base: Base, registro: Record<string, unknown>) {
   return createHash('sha1').update(JSON.stringify(valores)).digest('hex')
 }
 
+/** Campos acompanhados de uma base: todos os da planilha (menos chave e colunas do app), com rótulo amigável. */
+function camposAcompanhados(base: Base) {
+  const rotulos = CAMPOS_HISTORICO[base.id] ?? {}
+  return Object.fromEntries(
+    camposTabela(base)
+      .filter((c) => !base.chave.includes(c.campo) && !c.tratativa)
+      .map((c) => [c.campo, rotulos[c.campo] ?? c.cabecalhos[0] ?? c.campo]),
+  )
+}
+
 function textoValor(v: unknown) {
   if (v == null || v === '') return '—'
+  // Numérico do banco vem como texto ("20.50"); normaliza para comparar com o da planilha (20.5).
+  if (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v)) return String(Number(v))
   if (v instanceof Date) return v.toISOString().slice(0, 10)
   if (typeof v === 'boolean') return v ? 'Sim' : 'Não'
   return String(v)
@@ -53,6 +88,7 @@ export async function importarLote(importacaoId: number, linhas: Record<string, 
   const imp = await queryOne<{ base: BaseId; status: string }>('select base, status from importacoes where id = $1', [importacaoId])
   if (!imp || imp.status !== 'em_andamento') throw new Error('Importação não encontrada ou já concluída.')
   const base = BASES[imp.base]
+  await garantirEsquemaEventos()
 
   // Revalida tipos no servidor e remove duplicadas da mesma chave (vale a última).
   const porChave = new Map<string, Record<string, unknown>>()
@@ -72,7 +108,7 @@ export async function importarLote(importacaoId: number, linhas: Record<string, 
     await client.query('begin')
     const chaveSql = base.chave.map((k) => `t.${k}`).join(', ')
     const chaveTipos = base.chave.map((k) => `${k} text`).join(', ')
-    const monitorados = CAMPOS_HISTORICO[base.id] ?? {}
+    const monitorados = camposAcompanhados(base)
     const colunasAntigas = ['hash', 'removido_em', ...Object.keys(monitorados)]
     const antigos = await client.query(
       `select ${base.chave.map((k) => `t.${k}`).join(', ')}, ${colunasAntigas.map((c) => `t.${c}`).join(', ')}
@@ -133,9 +169,9 @@ export async function importarLote(importacaoId: number, linhas: Record<string, 
     )
     if (eventos.length) {
       await client.query(
-        `insert into eventos (entidade, chave, tipo, descricao)
-         select entidade, chave, tipo, descricao from jsonb_to_recordset($1::jsonb) as x(entidade text, chave text, tipo text, descricao text)`,
-        [JSON.stringify(eventos)],
+        `insert into eventos (entidade, chave, tipo, descricao, importacao_id)
+         select entidade, chave, tipo, descricao, $2 from jsonb_to_recordset($1::jsonb) as x(entidade text, chave text, tipo text, descricao text)`,
+        [JSON.stringify(eventos), importacaoId],
       )
     }
     if (base.id === 'ordens') await aplicarAcompanhamentoDaPlanilha(client, registros)
@@ -205,6 +241,7 @@ export async function concluirImportacao(importacaoId: number, carteiraCompleta:
   const imp = await queryOne<{ base: BaseId; status: string }>('select base, status from importacoes where id = $1', [importacaoId])
   if (!imp || imp.status !== 'em_andamento') throw new Error('Importação não encontrada ou já concluída.')
   const base = BASES[imp.base]
+  await garantirEsquemaEventos()
   let removidas = 0
   if (carteiraCompleta) {
     const rows = await query(
@@ -214,12 +251,16 @@ export async function concluirImportacao(importacaoId: number, carteiraCompleta:
       [importacaoId],
     )
     removidas = rows.length
-    if (base.id === 'ordens' && rows.length) {
+    if (rows.length) {
+      const saidas = rows.map((r) => ({
+        ...ENTIDADE_EVENTO[base.id](r),
+        tipo: 'removido',
+        descricao: base.id === 'ordens' ? `Item ${r.reserva}/${r.item} saiu do relatório do SAP` : 'Saiu do relatório do SAP',
+      }))
       await query(
-        `insert into eventos (entidade, chave, tipo, descricao)
-         select 'ordem', ordem, 'removido', 'Item ' || reserva || '/' || item || ' saiu do relatório do SAP'
-           from jsonb_to_recordset($1::jsonb) as x(ordem text, reserva text, item text)`,
-        [JSON.stringify(rows)],
+        `insert into eventos (entidade, chave, tipo, descricao, importacao_id)
+         select entidade, chave, tipo, descricao, $2 from jsonb_to_recordset($1::jsonb) as x(entidade text, chave text, tipo text, descricao text)`,
+        [JSON.stringify(saidas), importacaoId],
       )
     }
   }

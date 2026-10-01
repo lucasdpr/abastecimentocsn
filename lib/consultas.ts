@@ -1,5 +1,6 @@
 import 'server-only'
 import { query, queryOne } from './db'
+import { garantirEsquemaEventos } from './importacao'
 
 export async function configuracoes() {
   const rows = await query<{ chave: string; valor: string }>('select chave, valor from configuracoes')
@@ -528,4 +529,82 @@ export async function contarAlertas() {
 export async function contarPendentes() {
   const r = await queryOne<{ total: number }>('select count(*)::int as total from usuarios where pendente_aprovacao')
   return r?.total ?? 0
+}
+
+// ---------- O que mudou (por importação) ----------
+
+export type Importacao = {
+  id: number
+  base: string
+  arquivo: string | null
+  iniciado_em: string
+  concluido_em: string | null
+  linhas: number
+  novas: number
+  alteradas: number
+  removidas: number
+  status: string
+  usuario: string | null
+}
+
+export async function detalheImportacao(id: number) {
+  return queryOne<Importacao>(
+    `select i.*, u.nome as usuario from importacoes i left join usuarios u on u.id = i.usuario_id where i.id = $1`,
+    [id],
+  )
+}
+
+/** Mudanças que uma importação trouxe: itens novos, alterados (antes → depois) e que saíram do relatório. */
+export async function mudancasImportacao(params: { id: number; tipo?: string; busca?: string; pagina?: number }) {
+  await garantirEsquemaEventos()
+  const where = ['e.importacao_id = $1']
+  const valores: unknown[] = [params.id]
+  if (params.tipo && ['novo', 'mudanca', 'removido'].includes(params.tipo)) {
+    valores.push(params.tipo)
+    where.push(`e.tipo = $${valores.length}`)
+  }
+  if (params.busca?.trim()) {
+    valores.push(`%${params.busca.trim()}%`)
+    where.push(`(e.chave ilike $${valores.length} or e.descricao ilike $${valores.length})`)
+  }
+  const porPagina = 50
+  const pagina = params.pagina ?? 1
+  const sqlWhere = `where ${where.join(' and ')}`
+  const [linhas, total, porTipo] = await Promise.all([
+    query<{ id: number; entidade: string; chave: string; tipo: string; descricao: string }>(
+      `select e.id, e.entidade, e.chave, e.tipo, e.descricao from eventos e ${sqlWhere}
+        order by e.tipo, e.chave limit ${porPagina} offset ${(pagina - 1) * porPagina}`,
+      valores,
+    ),
+    queryOne<{ total: number }>(`select count(*)::int as total from eventos e ${sqlWhere}`, valores),
+    query<{ tipo: string; total: number }>(`select tipo, count(*)::int as total from eventos where importacao_id = $1 group by 1`, [params.id]),
+  ])
+  return { linhas, total: total?.total ?? 0, porPagina, porTipo }
+}
+
+/** Dias úteis (seg–sex) entre a data e hoje. Fim de semana sem importação não conta como atraso. */
+function diasUteisDesde(data: Date) {
+  let dias = 0
+  const cursor = new Date(data)
+  cursor.setHours(0, 0, 0, 0)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  while (cursor < hoje) {
+    cursor.setDate(cursor.getDate() + 1)
+    const dia = cursor.getDay()
+    if (dia !== 0 && dia !== 6) dias++
+  }
+  return dias
+}
+
+/** Última importação concluída de cada base e se ela está atrasada (mais de 1 dia útil sem atualizar). */
+export async function statusAtualizacao() {
+  const linhas = await query<{ id: number; base: string; concluido_em: string; linhas: number; novas: number; alteradas: number; removidas: number }>(
+    `select distinct on (base) id, base, concluido_em, linhas, novas, alteradas, removidas from importacoes
+      where status = 'concluida' order by base, concluido_em desc`,
+  )
+  return linhas.map((l) => {
+    const diasUteis = diasUteisDesde(new Date(l.concluido_em))
+    return { ...l, diasUteis, atrasada: diasUteis > 1 }
+  })
 }

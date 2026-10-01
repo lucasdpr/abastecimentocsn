@@ -49,7 +49,7 @@ export const BASES: Record<BaseId, Base> = {
     outrasAssinaturas: [['Stat Item', 'Ordem', 'Nºreser.', 'Status do sistema']],
     campos: [
       c('status_item', 'texto', 'Status do item', 'Stat Item'),
-      c('norma_apropriacao', 'texto', 'Norma de apropriação', 'Norma apro'),
+      c('norma_apropriacao', 'texto', 'Norma de apropriação', 'Norma apro', 'Coletor custo'),
       c('material', 'codigo', 'Material'),
       c('descricao', 'texto', 'Texto breve material'),
       c('qtd', 'numero', 'Qtd.necessária', 'Qtd.necess.'),
