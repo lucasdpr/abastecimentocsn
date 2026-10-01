@@ -1,12 +1,12 @@
 ' =====================================================================
 '  Robo IW38 - Central de Abastecimento
 '  1) Exporta a IW38 do SAP (SAP precisa estar ABERTO e LOGADO)
-'  2) Salva em C:\RoboAbastecimento\IW38.xlsx
+'  2) Salva IW38.xlsx na MESMA PASTA em que este arquivo esta
 '  3) Envia para o app, que atualiza e registra "O que mudou"
 '
 '  Uso: dois cliques. Para rodar sem janelas (Agendador do Windows):
 '       wscript.exe robo-iw38.vbs /silencioso
-'  Historico de cada execucao: C:\RoboAbastecimento\historico.txt
+'  Historico de cada execucao: historico.txt (na mesma pasta)
 '
 '  ATENCAO: este arquivo contem a CHAVE DO ROBO. Nao envie por e-mail
 '  nem deixe em pasta compartilhada.
@@ -15,19 +15,19 @@ Option Explicit
 
 Const URL_APP = "{{URL_APP}}"
 Const TOKEN = "{{TOKEN}}"
-Const PASTA = "C:\RoboAbastecimento"
 Const ARQUIVO = "IW38.xlsx"
 Const LAYOUT = "/CLAUDINEIA"
 Const DATA_DE = "13.09.2021"
 Const DATA_ATE = "31.12.2029"
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
-Dim fso, sh, silencioso, caminho, historico
+Dim fso, sh, silencioso, caminho, historico, PASTA
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 silencioso = False
 If WScript.Arguments.Count > 0 Then silencioso = (LCase(WScript.Arguments(0)) = "/silencioso")
-If Not fso.FolderExists(PASTA) Then fso.CreateFolder PASTA
+' Tudo (planilha, historico) fica na pasta onde este arquivo esta.
+PASTA = fso.GetParentFolderName(WScript.ScriptFullName)
 caminho = PASTA & "\" & ARQUIVO
 historico = PASTA & "\historico.txt"
 
@@ -43,6 +43,26 @@ Sub Falhar(msg)
   If Not silencioso Then MsgBox msg, vbCritical, "Robo IW38"
   WScript.Quit 1
 End Sub
+
+' Acha, entre todos os arquivos abertos no Excel, a aba com a lista do SAP
+' (cabecalho com a coluna "Ordem" e mais de 100 linhas).
+Function AcharAbaSap(xl)
+  On Error Resume Next
+  Dim wb, ws, c
+  Set AcharAbaSap = Nothing
+  For Each wb In xl.Workbooks
+    For Each ws In wb.Worksheets
+      For c = 1 To 40
+        If InStr(1, CStr(ws.Cells(1, c).Value), "Ordem", 1) > 0 Then
+          If ws.UsedRange.Rows.Count > 100 Then
+            Set AcharAbaSap = ws
+            Exit Function
+          End If
+        End If
+      Next
+    Next
+  Next
+End Function
 
 Function Existe(id)
   Existe = Not (session.findById(id, False) Is Nothing)
@@ -92,8 +112,9 @@ If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 
 ' ---------- 3. Exporta para planilha em pasta fixa ----------
-' O SAP abre a lista direto no Excel (nao salva em disco). Aqui pegamos essa
-' planilha aberta e salvamos em PASTA\ARQUIVO.
+' O SAP abre a lista direto no Excel (nao salva em disco). Esperamos o SAP
+' terminar de preencher a planilha e salvamos so a aba com os dados em
+' PASTA\ARQUIVO.
 If fso.FileExists(caminho) Then fso.DeleteFile caminho, True
 Dim grid
 Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
@@ -102,7 +123,7 @@ grid.setCurrentCell -1, ""
 grid.selectAll
 grid.contextMenu
 grid.selectContextMenuItem "&XXL"
-' Janelas de confirmacao do SAP (formato da planilha etc.)
+' Janelas de confirmacao do SAP (aplicativo: Microsoft Excel etc.)
 For i = 1 To 8
   If Not Existe("wnd[1]") Then Exit For
   If Existe("wnd[1]/usr/ctxtDY_PATH") Then
@@ -115,35 +136,75 @@ Next
 If Err.Number <> 0 Then Falhar "Falha ao exportar a planilha: " & Err.Description
 Err.Clear
 
-' Espera a planilha aparecer no Excel (ate 3 minutos) e salva
-Dim excel, wbExp, espera, ok
+' Espera a planilha do SAP aparecer no Excel, terminar de carregar, e salva.
+Dim excel, wsSap, wbSap, tentativa, ok, linhas, linhasAntes, estavel, motivo, novoWb
 ok = False
-For espera = 1 To 180
+linhasAntes = -1
+estavel = 0
+motivo = "Excel ainda nao abriu"
+For tentativa = 1 To 420
   If fso.FileExists(caminho) Then
     ok = True
     Exit For
   End If
+  Err.Clear
   Set excel = Nothing
   Set excel = GetObject(, "Excel.Application")
-  If Err.Number = 0 Then
-    If excel.Workbooks.Count > 0 Then
-      ' Espera o SAP terminar de preencher a planilha
-      WScript.Sleep 4000
-      Set wbExp = excel.ActiveWorkbook
-      excel.DisplayAlerts = False
-      wbExp.SaveAs caminho, 51
-      If Err.Number = 0 Then
-        wbExp.Close False
-        ok = True
-        Exit For
+  If Err.Number <> 0 Then
+    motivo = "nao achei o Excel aberto (" & Err.Description & ")"
+    Err.Clear
+  Else
+    Set wsSap = Nothing
+    Set wsSap = AcharAbaSap(excel)
+    If wsSap Is Nothing Then
+      motivo = "Excel aberto (" & excel.Workbooks.Count & " arquivo(s)), mas sem a lista do SAP ainda"
+      Err.Clear
+    Else
+      linhas = wsSap.UsedRange.Rows.Count
+      If Err.Number <> 0 Then
+        motivo = "Excel ocupado (" & Err.Description & ")"
+        Err.Clear
+      ElseIf linhas = linhasAntes And excel.Ready Then
+        estavel = estavel + 1
+      Else
+        estavel = 0
+        motivo = "SAP ainda preenchendo a planilha (" & linhas & " linhas)"
+      End If
+      linhasAntes = linhas
+      ' Estavel por 3 verificacoes seguidas = SAP terminou de preencher
+      If estavel >= 3 Then
+        Set wbSap = wsSap.Parent
+        excel.DisplayAlerts = False
+        wsSap.Copy
+        If Err.Number = 0 Then
+          Set novoWb = excel.ActiveWorkbook
+          novoWb.SaveAs caminho, 51
+          If Err.Number = 0 Then
+            novoWb.Close False
+            ok = True
+          Else
+            motivo = "falha ao salvar a copia (" & Err.Description & ")"
+          End If
+        Else
+          motivo = "falha ao copiar a aba (" & Err.Description & ")"
+          Err.Clear
+          wbSap.SaveCopyAs caminho
+          If Err.Number = 0 Then ok = True Else motivo = motivo & " / SaveCopyAs: " & Err.Description
+        End If
+        Err.Clear
+        If ok Then
+          wbSap.Close False
+          Exit For
+        End If
+        estavel = 0
       End If
     End If
   End If
-  Err.Clear
+  If tentativa Mod 15 = 0 Then Registrar "Aguardando a planilha (" & tentativa & "s): " & motivo
   WScript.Sleep 1000
 Next
 Err.Clear
-If Not ok Or Not fso.FileExists(caminho) Then Falhar "O robo nao conseguiu salvar " & caminho & ". A planilha do SAP nao apareceu no Excel. Confira se o Excel esta instalado e rode de novo."
+If Not ok Or Not fso.FileExists(caminho) Then Falhar "O robo nao conseguiu salvar " & caminho & "." & vbCrLf & "Ultimo estado: " & motivo & vbCrLf & vbCrLf & "Feche o Excel e rode de novo. Se repetir, mande este texto e o arquivo historico.txt."
 
 ' Volta o SAP para a tela inicial
 session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
