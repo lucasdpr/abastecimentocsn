@@ -5,7 +5,7 @@ import { FormAcompanhamento } from '@/components/form-acompanhamento'
 import { SeloParada, SeloSituacao } from '@/components/selos'
 import { Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { configuracoes, detalheOrdem } from '@/lib/consultas'
+import { configuracoes, detalheOrdem, type OrdemSap } from '@/lib/consultas'
 import { data, dataHora, moeda, numero } from '@/lib/formato'
 
 type Item = {
@@ -39,7 +39,9 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
   const usuario = await exigirUsuario()
   const { ordem } = await params
   const [d, cfg] = await Promise.all([detalheOrdem(decodeURIComponent(ordem)), configuracoes()])
-  if (!d.resumo) notFound()
+  if (!d.resumo && !d.sap) notFound()
+  // OM que só existe na IW38 (sem itens de material na base de Ordens).
+  if (!d.resumo) return <SomenteSap sap={d.sap!} eventos={d.eventos} />
   const o = d.resumo
   const itens = d.itens as Item[]
 
@@ -69,6 +71,8 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
             <Info rotulo="Status usuário" valor={<Codigos texto={o.status_usuario} destaque />} className="col-span-2" />
             <Info rotulo="Status sistema" valor={<Codigos texto={o.status_sistema} />} className="col-span-2" />
           </section>
+
+          {d.sap && <PainelSap sap={d.sap} />}
 
           <Painel titulo="Itens de material" descricao={`${itens.length} itens na reserva`}>
             <ul className="divide-y divide-line">
@@ -144,6 +148,74 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
               </ol>
             ) : (
               <Vazio texto="Sem eventos ainda. Mudanças aparecem aqui a cada importação." />
+            )}
+          </Painel>
+        </div>
+      </div>
+    </>
+  )
+}
+
+/** Cadastro da OM vindo da IW38. */
+function PainelSap({ sap }: { sap: OrdemSap }) {
+  return (
+    <Painel
+      titulo="Dados da ordem no SAP"
+      descricao="Da IW38: tipo, prioridade, datas e custo."
+      acao={sap.removido_em ? <Selo tom="alerta">Fora da última IW38</Selo> : undefined}
+    >
+      <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+        <Info rotulo="Tipo" valor={sap.tipo ?? '—'} />
+        <Info rotulo="Prioridade" valor={sap.prioridade ?? '—'} />
+        <Info rotulo="Centro de trabalho" valor={sap.centro_trabalho ?? '—'} />
+        <Info rotulo="Custo total planejado" valor={sap.custo_planejado != null ? moeda(sap.custo_planejado) : '—'} />
+        <Info rotulo="Início base" valor={data(sap.inicio_base)} />
+        <Info rotulo="Fim base" valor={data(sap.fim_base)} />
+        <Info rotulo="Liberada em" valor={data(sap.data_liberacao)} />
+        <Info rotulo="Criada em" valor={`${data(sap.data_entrada)}${sap.criado_por ? ` · ${sap.criado_por}` : ''}`} />
+        <Info rotulo="Status aprovação" valor={sap.status_aprovacao || '—'} />
+        <Info rotulo="Última modificação" valor={`${data(sap.data_modificacao)}${sap.modificado_por ? ` · ${sap.modificado_por}` : ''}`} />
+        <Info rotulo="Unidade operacional" valor={sap.unidade_operacional ?? '—'} className="col-span-2" />
+      </div>
+    </Painel>
+  )
+}
+
+/** OM que existe na IW38 mas não tem itens de material importados. */
+function SomenteSap({ sap, eventos }: { sap: OrdemSap; eventos: Array<{ tipo: string; descricao: string; criado_em: string; usuario: string | null }> }) {
+  return (
+    <>
+      <Link href="/ordens" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+        <ArrowLeft className="size-4" /> Ordens
+      </Link>
+      <div className="mb-5">
+        <h1 className="num text-xl font-semibold tracking-[-0.02em] md:text-2xl">OM {sap.ordem}</h1>
+        <p className="mt-1 text-sm text-ink-2">{sap.texto}</p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
+          <section className="card grid grid-cols-2 gap-4 p-4 text-sm md:grid-cols-4">
+            <Info rotulo="Grupo planejamento" valor={sap.grp_planejamento ?? '—'} />
+            <Info rotulo="Local de instalação" valor={sap.local_instalacao ?? '—'} className="col-span-1 md:col-span-3" />
+            <Info rotulo="Status usuário" valor={<Codigos texto={sap.status_usuario} destaque />} className="col-span-2" />
+            <Info rotulo="Status sistema" valor={<Codigos texto={sap.status_sistema} />} className="col-span-2" />
+          </section>
+          <PainelSap sap={sap} />
+          <Vazio texto="Esta OM não tem itens de material na base de Ordens (reservas)." />
+        </div>
+        <div className="min-w-0">
+          <Painel titulo="Histórico">
+            {eventos.length ? (
+              <ol className="space-y-3">
+                {eventos.map((e, idx) => (
+                  <li key={idx} className="text-sm">
+                    <div>{e.descricao}</div>
+                    <div className="text-xs text-muted">{dataHora(e.criado_em)}{e.usuario ? ` · ${e.usuario}` : ' · importação SAP'}</div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <Vazio texto="Sem eventos ainda." />
             )}
           </Painel>
         </div>

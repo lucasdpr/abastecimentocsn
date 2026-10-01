@@ -29,6 +29,7 @@ export function colunasExportacao(baseId: BaseId): Coluna[] {
     ],
     ativacao: [],
     reservas: [],
+    iw38: [],
   }
   return [...originais, ...extras[baseId]]
 }
@@ -51,6 +52,8 @@ export async function dadosExportacao(baseId: BaseId) {
       return query('select * from ativacao where removido_em is null order by po, item_po')
     case 'reservas':
       return query('select * from reservas where removido_em is null order by reserva, item')
+    case 'iw38':
+      return query("select * from ordens_sap where removido_em is null order by ordem").catch(() => [])
   }
 }
 
