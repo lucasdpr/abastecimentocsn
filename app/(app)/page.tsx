@@ -2,14 +2,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { TriangleAlert, ArrowRight, BellRing, CalendarCheck, CalendarX2, CircleQuestionMark, Clock, FileClock, Truck, Upload, CircleX } from 'lucide-react'
 import { GraficoRetornoSemanal } from '@/components/graficos'
-import { Barras, Cabecalho, Composicao, Kpi, Medidor, Painel, Selo, Vazio } from '@/components/ui'
+import { AvisoAtualizacao, Barras, Cabecalho, Composicao, Kpi, Medidor, Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { painel } from '@/lib/consultas'
+import { painel, statusAtualizacao } from '@/lib/consultas'
 import { data, dataHora, moeda, moedaCurta, numero, pct } from '@/lib/formato'
 
 export const metadata = { title: 'Painel' }
 
-const NOME_BASE: Record<string, string> = { ordens: 'Ordens', fup: 'Follow-up', ativacao: 'Ativação', reservas: 'Reservas' }
+const NOME_BASE: Record<string, string> = { ordens: 'Ordens', iw38: 'IW38', fup: 'Follow-up', ativacao: 'Ativação', reservas: 'Reservas' }
 
 // Status de sistema padrão do SAP PM. Os de usuário são do perfil da CSN e aparecem só como código.
 const FASE_SISTEMA: Record<string, string> = { ABER: 'Aberta', LIB: 'Liberada', ENTE: 'Encerrada tecnicamente', ENCE: 'Encerrada' }
@@ -33,7 +33,7 @@ const APROVACAO: Record<string, { cor: string; icone?: typeof Clock }> = {
 export default async function PaginaPainel() {
   const usuario = await exigirUsuario()
   if (!pode.verGestao(usuario)) redirect('/ordens')
-  const d = await painel()
+  const [d, atualizacao] = await Promise.all([painel(), statusAtualizacao()])
   const r = d.resumo
   const f = d.fupResumo
   const semDados = r.total === 0 && f.itens === 0
@@ -53,6 +53,11 @@ export default async function PaginaPainel() {
             </Link>
           )
         }
+      />
+
+      <AvisoAtualizacao
+        href={pode.editar(usuario) ? '/importar' : undefined}
+        bases={atualizacao.filter((x) => x.atrasada).map((x) => ({ nome: NOME_BASE[x.base] ?? x.base, atualizadoEm: dataHora(x.concluido_em), diasUteis: x.diasUteis }))}
       />
 
       {semDados && (

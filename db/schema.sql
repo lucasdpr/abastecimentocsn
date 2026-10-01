@@ -251,6 +251,48 @@ create table if not exists eventos (
 );
 create index if not exists eventos_chave_idx on eventos (entidade, chave, criado_em desc);
 
+-- Cada mudança detectada fica ligada à importação que a trouxe (tela "O que mudou").
+alter table eventos add column if not exists importacao_id int references importacoes(id) on delete set null;
+create index if not exists eventos_importacao_idx on eventos (importacao_id, tipo);
+
+-- Cadastro das ordens (exportação da IW38): uma linha por OM.
+create table if not exists ordens_sap (
+  ordem text primary key,
+  tipo text,
+  prioridade text,
+  grp_planejamento text,
+  centro_trabalho text,
+  tam text,
+  plano_manutencao text,
+  revisao text,
+  status_aprovacao text,
+  local_instalacao text,
+  denominacao_local text,
+  texto text,
+  status_usuario text,
+  status_sistema text,
+  modificado_por text,
+  criado_por text,
+  sistema_funcional text,
+  unidade_operacional text,
+  unidade_funcional text,
+  indicador text,
+  centro_custo text,
+  centro_custo_resp text,
+  nota text,
+  inicio_base date,
+  fim_base date,
+  data_modificacao date,
+  data_liberacao date,
+  data_entrada date,
+  custo_planejado numeric,
+  hash text not null,
+  primeira_vez_em timestamptz not null default now(),
+  ultima_mudanca_em timestamptz not null default now(),
+  ultima_importacao_id int,
+  removido_em timestamptz
+);
+
 -- Visão por ordem (agrega os itens).
 create or replace view ordens as
 with i as (

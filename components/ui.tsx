@@ -209,6 +209,26 @@ export function Composicao({ partes, formatar = (v) => v.toLocaleString('pt-BR')
   )
 }
 
+/** Aviso de bases com mais de 1 dia útil sem atualizar (ex.: o robô não rodou). */
+export function AvisoAtualizacao({ bases, href }: { bases: Array<{ nome: string; atualizadoEm: string; diasUteis: number }>; href?: string }) {
+  if (!bases.length) return null
+  const conteudo = (
+    <>
+      <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warn-ink" aria-hidden />
+      <span className="min-w-0 text-sm text-ink">
+        <span className="font-semibold">Dados desatualizados.</span>{' '}
+        {bases.map((b) => `${b.nome}: ${b.diasUteis} dias úteis sem atualizar (última em ${b.atualizadoEm})`).join(' · ')}
+      </span>
+    </>
+  )
+  const classe = 'mb-5 flex items-start gap-2.5 rounded-xl border border-warn/40 bg-warn-soft px-4 py-3'
+  return href ? (
+    <Link href={href} className={cn(classe, 'transition-colors hover:border-warn')}>{conteudo}</Link>
+  ) : (
+    <div className={classe}>{conteudo}</div>
+  )
+}
+
 export function Vazio({ texto, acao }: { texto: string; acao?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line-strong/70 px-4 py-10 text-center text-sm text-muted">

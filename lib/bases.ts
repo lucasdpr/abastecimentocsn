@@ -16,7 +16,7 @@ export type Campo = {
   app?: boolean
 }
 
-export type BaseId = 'ordens' | 'fup' | 'ativacao' | 'reservas'
+export type BaseId = 'ordens' | 'fup' | 'ativacao' | 'reservas' | 'iw38'
 
 export type Base = {
   id: BaseId
@@ -49,7 +49,7 @@ export const BASES: Record<BaseId, Base> = {
     outrasAssinaturas: [['Stat Item', 'Ordem', 'Nºreser.', 'Status do sistema']],
     campos: [
       c('status_item', 'texto', 'Status do item', 'Stat Item'),
-      c('norma_apropriacao', 'texto', 'Norma de apropriação', 'Norma apro'),
+      c('norma_apropriacao', 'texto', 'Norma de apropriação', 'Norma apro', 'Coletor custo'),
       c('material', 'codigo', 'Material'),
       c('descricao', 'texto', 'Texto breve material'),
       c('qtd', 'numero', 'Qtd.necessária', 'Qtd.necess.'),
@@ -148,6 +148,45 @@ export const BASES: Record<BaseId, Base> = {
       c('centro', 'texto', 'CENTRO'),
     ],
     derivarChave: (l) => ({ chave: [l.rm, l.item_rm, l.po, l.item_po].map((v) => v ?? '').join('-') }),
+  },
+  iw38: {
+    id: 'iw38',
+    nome: 'Ordens SAP (IW38)',
+    descricao: 'Exportação da IW38: uma linha por OM (tipo, prioridade, datas, custo e status).',
+    tabela: 'ordens_sap',
+    chave: ['ordem'],
+    assinatura: ['Ordem', 'Tp.', 'Status do sistema', 'InícioBase'],
+    campos: [
+      c('ordem', 'codigo', 'Ordem'),
+      c('tipo', 'texto', 'Tp.', 'Tipo de ordem'),
+      c('prioridade', 'texto', 'P', 'Prioridade'),
+      c('grp_planejamento', 'texto', 'GPM', 'Grp.plnj.PM'),
+      c('centro_trabalho', 'texto', 'CenTrabRes'),
+      c('tam', 'texto', 'TAM'),
+      c('plano_manutencao', 'texto', 'Pln.manut.'),
+      c('revisao', 'texto', 'Revisão'),
+      c('status_aprovacao', 'texto', 'St.Aprovaç'),
+      c('local_instalacao', 'texto', 'Loc.instalação'),
+      c('denominacao_local', 'texto', 'Denom.loc.instalação'),
+      c('texto', 'texto', 'Texto breve'),
+      c('status_usuario', 'texto', 'Status usuário'),
+      c('status_sistema', 'texto', 'Status do sistema'),
+      c('modificado_por', 'texto', 'Modif.por'),
+      c('criado_por', 'texto', 'Criado por'),
+      c('sistema_funcional', 'texto', 'Sistema Funcional'),
+      c('unidade_operacional', 'texto', 'Unidade Operacional'),
+      c('unidade_funcional', 'texto', 'Unidade Funcional'),
+      c('indicador', 'texto', 'I'),
+      c('centro_custo', 'texto', 'Centro custo'),
+      c('centro_custo_resp', 'texto', 'CenCstResp'),
+      c('nota', 'codigo', 'Nota'),
+      c('inicio_base', 'data', 'InícioBase'),
+      c('fim_base', 'data', 'Fim-base'),
+      c('data_modificacao', 'data', 'Data modif.'),
+      c('data_liberacao', 'data', 'Dat.liberação real'),
+      c('data_entrada', 'data', 'Data entr.'),
+      c('custo_planejado', 'numero', 'CustTotPl.'),
+    ],
   },
   reservas: {
     id: 'reservas',
