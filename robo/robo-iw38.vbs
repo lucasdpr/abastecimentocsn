@@ -64,6 +64,90 @@ Function AcharAbaSap(xl)
   Next
 End Function
 
+' Espera o SAP terminar de preencher a planilha no Excel e salva a aba de dados.
+' Devolve True se salvou. "motivo" explica onde parou (vai para o historico).
+Function EsperarESalvar(destino, ByRef motivo)
+  On Error Resume Next
+  Dim xl, aba, linhas, antes, estavel, tentativa, ok
+  EsperarESalvar = False
+  antes = -1
+  estavel = 0
+  tentativa = 0
+  motivo = "Excel ainda nao abriu"
+  Do While tentativa < 420
+    tentativa = tentativa + 1
+    Err.Clear
+    Set xl = Nothing
+    Set xl = GetObject(, "Excel.Application")
+    If Err.Number <> 0 Then
+      motivo = "nao achei o Excel aberto"
+    Else
+      Set aba = Nothing
+      Set aba = AcharAbaSap(xl)
+      If aba Is Nothing Then
+        motivo = "Excel aberto, mas sem a lista do SAP ainda"
+      Else
+        linhas = -1
+        linhas = aba.UsedRange.Rows.Count
+        If linhas < 0 Then
+          motivo = "Excel ocupado"
+          estavel = 0
+        ElseIf linhas = antes Then
+          estavel = estavel + 1
+        Else
+          estavel = 0
+          motivo = "SAP ainda preenchendo a planilha (" & linhas & " linhas)"
+        End If
+        antes = linhas
+        If estavel >= 3 Then
+          ok = SalvarAba(xl, aba, destino, motivo)
+          If ok Then
+            EsperarESalvar = True
+            Exit Function
+          End If
+          estavel = 0
+        End If
+      End If
+    End If
+    If tentativa Mod 15 = 0 Then Registrar "Aguardando a planilha (" & tentativa & "s): " & motivo
+    WScript.Sleep 1000
+  Loop
+End Function
+
+' Copia a aba de dados para um arquivo novo (sem a tabela dinamica do SAP) e salva.
+Function SalvarAba(xl, aba, destino, ByRef motivo)
+  On Error Resume Next
+  Dim livroSap, novo
+  SalvarAba = False
+  Set livroSap = aba.Parent
+  xl.DisplayAlerts = False
+  Err.Clear
+  aba.Copy
+  If Err.Number = 0 Then
+    Set novo = xl.ActiveWorkbook
+    novo.SaveAs destino, 51
+    If Err.Number = 0 Then
+      novo.Close False
+      SalvarAba = True
+    Else
+      motivo = "falha ao salvar a copia (" & Err.Description & ")"
+    End If
+  Else
+    motivo = "falha ao copiar a aba (" & Err.Description & ")"
+    Err.Clear
+    livroSap.SaveCopyAs destino
+    If Err.Number = 0 Then
+      SalvarAba = True
+    Else
+      motivo = motivo & " / SaveCopyAs: " & Err.Description
+    End If
+  End If
+  If SalvarAba Then
+    Err.Clear
+    livroSap.Close False
+  End If
+End Function
+
 Function Existe(id)
   Existe = Not (session.findById(id, False) Is Nothing)
 End Function
@@ -137,74 +221,12 @@ If Err.Number <> 0 Then Falhar "Falha ao exportar a planilha: " & Err.Descriptio
 Err.Clear
 
 ' Espera a planilha do SAP aparecer no Excel, terminar de carregar, e salva.
-Dim excel, wsSap, wbSap, tentativa, ok, linhas, linhasAntes, estavel, motivo, novoWb
-ok = False
-linhasAntes = -1
-estavel = 0
-motivo = "Excel ainda nao abriu"
-For tentativa = 1 To 420
-  If fso.FileExists(caminho) Then
-    ok = True
-    Exit For
-  End If
-  Err.Clear
-  Set excel = Nothing
-  Set excel = GetObject(, "Excel.Application")
-  If Err.Number <> 0 Then
-    motivo = "nao achei o Excel aberto (" & Err.Description & ")"
-    Err.Clear
-  Else
-    Set wsSap = Nothing
-    Set wsSap = AcharAbaSap(excel)
-    If wsSap Is Nothing Then
-      motivo = "Excel aberto (" & excel.Workbooks.Count & " arquivo(s)), mas sem a lista do SAP ainda"
-      Err.Clear
-    Else
-      linhas = wsSap.UsedRange.Rows.Count
-      If Err.Number <> 0 Then
-        motivo = "Excel ocupado (" & Err.Description & ")"
-        Err.Clear
-      ElseIf linhas = linhasAntes And excel.Ready Then
-        estavel = estavel + 1
-      Else
-        estavel = 0
-        motivo = "SAP ainda preenchendo a planilha (" & linhas & " linhas)"
-      End If
-      linhasAntes = linhas
-      ' Estavel por 3 verificacoes seguidas = SAP terminou de preencher
-      If estavel >= 3 Then
-        Set wbSap = wsSap.Parent
-        excel.DisplayAlerts = False
-        wsSap.Copy
-        If Err.Number = 0 Then
-          Set novoWb = excel.ActiveWorkbook
-          novoWb.SaveAs caminho, 51
-          If Err.Number = 0 Then
-            novoWb.Close False
-            ok = True
-          Else
-            motivo = "falha ao salvar a copia (" & Err.Description & ")"
-          End If
-        Else
-          motivo = "falha ao copiar a aba (" & Err.Description & ")"
-          Err.Clear
-          wbSap.SaveCopyAs caminho
-          If Err.Number = 0 Then ok = True Else motivo = motivo & " / SaveCopyAs: " & Err.Description
-        End If
-        Err.Clear
-        If ok Then
-          wbSap.Close False
-          Exit For
-        End If
-        estavel = 0
-      End If
-    End If
-  End If
-  If tentativa Mod 15 = 0 Then Registrar "Aguardando a planilha (" & tentativa & "s): " & motivo
-  WScript.Sleep 1000
-Next
+Dim salvou, motivoFinal
+salvou = EsperarESalvar(caminho, motivoFinal)
 Err.Clear
-If Not ok Or Not fso.FileExists(caminho) Then Falhar "O robo nao conseguiu salvar " & caminho & "." & vbCrLf & "Ultimo estado: " & motivo & vbCrLf & vbCrLf & "Feche o Excel e rode de novo. Se repetir, mande este texto e o arquivo historico.txt."
+If Not salvou Or Not fso.FileExists(caminho) Then
+  Falhar "O robo nao conseguiu salvar " & caminho & "." & vbCrLf & "Ultimo estado: " & motivoFinal & vbCrLf & vbCrLf & "Feche o Excel e rode de novo. Se repetir, mande este texto e o arquivo historico.txt."
+End If
 
 ' Volta o SAP para a tela inicial
 session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
