@@ -21,7 +21,7 @@ Const DATA_DE = "13.09.2021"
 Const DATA_ATE = "31.12.2029"
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
-Dim fso, sh, silencioso, caminho, historico, PASTA, PASTAS
+Dim fso, sh, silencioso, caminho, historico, PASTA, PASTAS, FUNDOS
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 silencioso = False
@@ -35,6 +35,8 @@ PASTAS = Array(sh.SpecialFolders("Desktop"), sh.SpecialFolders("MyDocuments"), _
                sh.ExpandEnvironmentStrings("%USERPROFILE%\Downloads"), _
                sh.ExpandEnvironmentStrings("%USERPROFILE%\Desktop"), _
                sh.ExpandEnvironmentStrings("%USERPROFILE%\Documents\SAP\SAP GUI"), PASTA)
+' Pastas temporarias: o SAP pode gravar ali e o Excel abrir dali (procura tambem nas subpastas).
+FUNDOS = Array(sh.ExpandEnvironmentStrings("%TEMP%"), sh.ExpandEnvironmentStrings("%LOCALAPPDATA%\Temp"))
 
 Sub Registrar(msg)
   Dim f
@@ -49,28 +51,50 @@ Sub Falhar(msg)
   WScript.Quit 1
 End Sub
 
-' Procura, nas pastas onde o SAP costuma salvar, o arquivo .xlsx/.xls mais novo
-' gravado depois de "desde". Devolve o caminho ou "".
-Function AcharMaisNovo(desde)
+' Varre uma pasta (e subpastas ate "niveis") atras do .xlsx/.xls mais novo que "melhorData".
+Sub Varrer(pasta, niveis, ByRef melhorData, ByRef melhor)
   On Error Resume Next
-  Dim i, arq, ext, melhorData
-  AcharMaisNovo = ""
-  melhorData = desde
-  For i = 0 To UBound(PASTAS)
-    If PASTAS(i) <> "" Then
-      If fso.FolderExists(PASTAS(i)) Then
-        For Each arq In fso.GetFolder(PASTAS(i)).Files
-          ext = LCase(fso.GetExtensionName(arq.Name))
-          If (ext = "xlsx" Or ext = "xls") And Left(arq.Name, 2) <> "~$" Then
-            If arq.DateLastModified >= melhorData Then
-              melhorData = arq.DateLastModified
-              AcharMaisNovo = arq.Path
-            End If
-          End If
-        Next
+  Dim arq, sub1, ext
+  If Not fso.FolderExists(pasta) Then Exit Sub
+  For Each arq In fso.GetFolder(pasta).Files
+    ext = LCase(fso.GetExtensionName(arq.Name))
+    If (ext = "xlsx" Or ext = "xls") And Left(arq.Name, 2) <> "~$" Then
+      If arq.DateLastModified >= melhorData Then
+        melhorData = arq.DateLastModified
+        melhor = arq.Path
       End If
     End If
   Next
+  If niveis > 0 Then
+    For Each sub1 In fso.GetFolder(pasta).SubFolders
+      Varrer sub1.Path, niveis - 1, melhorData, melhor
+    Next
+  End If
+End Sub
+
+' Procura o arquivo .xlsx/.xls mais novo, gravado depois de "desde", nas pastas de busca.
+Function AcharMaisNovo(desde)
+  On Error Resume Next
+  Dim i, melhorData, melhor
+  melhorData = desde
+  melhor = ""
+  For i = 0 To UBound(PASTAS)
+    If PASTAS(i) <> "" Then Varrer PASTAS(i), 0, melhorData, melhor
+  Next
+  For i = 0 To UBound(FUNDOS)
+    If FUNDOS(i) <> "" Then Varrer FUNDOS(i), 2, melhorData, melhor
+  Next
+  AcharMaisNovo = melhor
+End Function
+
+' Quantos processos EXCEL.EXE existem agora.
+Function ContaExcel()
+  On Error Resume Next
+  Dim wmi, col
+  ContaExcel = -1
+  Set wmi = GetObject("winmgmts:\\.\root\cimv2")
+  Set col = wmi.ExecQuery("Select ProcessId From Win32_Process Where Name = 'EXCEL.EXE'")
+  ContaExcel = col.Count
 End Function
 
 ' Resumo dos processos do Excel (vai para o historico, para diagnostico).
@@ -147,8 +171,11 @@ End Function
 ' quando a janela dele esta ativa: por isso o AppActivate.
 Function EsperarPlanilha(desde, ByRef motivo)
   On Error Resume Next
-  Dim t, achado, tamanho, antes, estavel, xl, aba, linhas, antesLinhas, estavelLinhas, ativou
+  Dim t, achado, tamanho, antes, estavel, xl, aba, linhas, antesLinhas, estavelLinhas, ativou, n, ultimoN, viuArquivo, copia
   EsperarPlanilha = False
+  ultimoN = -2
+  viuArquivo = False
+  copia = PASTA & "\IW38.parcial.tmp"
   antes = -1
   estavel = 0
   antesLinhas = -1
@@ -165,11 +192,26 @@ Function EsperarPlanilha(desde, ByRef motivo)
       Exit Function
     End If
 
-    ' (a) arquivo novo gravado pelo SAP
+    ' Anota quando o Excel abre e quando fecha (diagnostico).
+    n = ContaExcel()
+    If n <> ultimoN Then
+      Registrar "Excel: " & n & " processo(s) agora"
+      ultimoN = n
+    End If
+
+    ' (a) arquivo novo gravado pelo SAP (inclui a pasta temporaria)
     achado = AcharMaisNovo(desde)
     If achado <> "" Then
       tamanho = -1
       tamanho = fso.GetFile(achado).Size
+      If tamanho <> antes Then
+        If Not viuArquivo Then Registrar "Arquivo novo visto: " & achado & " (" & Round(tamanho / 1024) & " KB)"
+        viuArquivo = True
+        ' Guarda uma copia na hora: se o arquivo sumir (Excel fechando), nao perdemos.
+        Err.Clear
+        fso.CopyFile achado, copia, True
+        Err.Clear
+      End If
       If tamanho > 0 And tamanho = antes Then
         estavel = estavel + 1
       Else
@@ -184,6 +226,16 @@ Function EsperarPlanilha(desde, ByRef motivo)
           Exit Function
         End If
       End If
+    ElseIf viuArquivo Then
+      ' O arquivo existia e sumiu (o Excel/SAP apagou ao fechar): usa a copia guardada.
+      Registrar "O arquivo sumiu; usando a copia guardada"
+      If fso.FileExists(copia) Then
+        If CopiarArquivo(copia, caminho) Then
+          EsperarPlanilha = True
+          Exit Function
+        End If
+      End If
+      viuArquivo = False
     End If
 
     ' (b) planilha aberta no Excel
@@ -252,7 +304,7 @@ Function Existe(id)
 End Function
 
 ' Primeira coisa: anota que o robo abriu (se este arquivo nao aparecer, o script nao rodou).
-Registrar "Script aberto (versao 8) em " & PASTA
+Registrar "Script aberto (versao 9) em " & PASTA
 If Not silencioso Then sh.Popup "Robo IW38 iniciado. Procurando o SAP...", 3, "Robo IW38", 64 + 4096
 
 ' ---------- 1. SAP aberto e logado ----------
