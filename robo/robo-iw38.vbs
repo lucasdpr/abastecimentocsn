@@ -40,7 +40,7 @@ End Sub
 
 Sub Falhar(msg)
   Registrar "ERRO: " & msg
-  If Not silencioso Then MsgBox msg, vbCritical, "Robo IW38"
+  If Not silencioso Then MsgBox msg, vbCritical + 4096, "Robo IW38"
   WScript.Quit 1
 End Sub
 
@@ -153,7 +153,8 @@ Function Existe(id)
 End Function
 
 ' Primeira coisa: anota que o robo abriu (se este arquivo nao aparecer, o script nao rodou).
-Registrar "Script aberto (versao 5) em " & PASTA
+Registrar "Script aberto (versao 6) em " & PASTA
+If Not silencioso Then sh.Popup "Robo IW38 iniciado. Procurando o SAP...", 3, "Robo IW38", 64 + 4096
 
 ' ---------- 1. SAP aberto e logado ----------
 Dim SapGuiAuto, application, connection, session
@@ -169,7 +170,7 @@ On Error GoTo 0
 If Not silencioso Then
   If MsgBox("O robo vai usar o SAP por alguns minutos para exportar a IW38." & vbCrLf & _
             "Nao mexa no SAP ate aparecer a mensagem de fim." & vbCrLf & vbCrLf & "Continuar?", _
-            vbOKCancel + vbInformation, "Robo IW38") <> vbOK Then WScript.Quit 0
+            vbOKCancel + vbInformation + 4096, "Robo IW38") <> vbOK Then WScript.Quit 0
 End If
 Registrar "Inicio"
 
@@ -259,4 +260,4 @@ End If
 
 texto = Replace(texto, vbLf & "HTTP 200", "")
 Registrar texto
-If Not silencioso Then MsgBox "Pronto. O app foi atualizado:" & vbCrLf & vbCrLf & texto, vbInformation, "Robo IW38"
+If Not silencioso Then MsgBox "Pronto. O app foi atualizado:" & vbCrLf & vbCrLf & texto, vbInformation + 4096, "Robo IW38"
