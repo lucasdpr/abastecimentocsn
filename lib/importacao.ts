@@ -150,7 +150,7 @@ function textoValor(v: unknown) {
   return String(v)
 }
 
-export async function iniciarImportacao(baseId: BaseId, arquivo: string, usuarioId: number) {
+export async function iniciarImportacao(baseId: BaseId, arquivo: string, usuarioId: number | null) {
   await garantirTabela(BASES[baseId])
   const row = await queryOne<{ id: number }>(
     'insert into importacoes (base, arquivo, usuario_id) values ($1, $2, $3) returning id',

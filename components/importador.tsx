@@ -3,7 +3,8 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { CircleCheckBig, FileSpreadsheet, LoaderCircle, Upload } from 'lucide-react'
-import { BASES, converterLinha, identificarBase, mapearColunas, type BaseId } from '@/lib/bases'
+import { BASES, type BaseId } from '@/lib/bases'
+import { lerAbas } from '@/lib/planilha'
 import { numero } from '@/lib/formato'
 
 type Aba = {
@@ -17,18 +18,6 @@ type Aba = {
 type Resultado = { base: BaseId; linhas: number; novas: number; alteradas: number; removidas: number }
 
 const LOTE = 1000
-
-/** Converte o valor de uma célula do ExcelJS em valor simples. */
-function valorCelula(v: unknown): unknown {
-  if (v == null) return null
-  if (v instanceof Date || typeof v !== 'object') return v
-  const o = v as Record<string, unknown>
-  if ('result' in o) return valorCelula(o.result)
-  if ('richText' in o && Array.isArray(o.richText)) return (o.richText as Array<{ text: string }>).map((r) => r.text).join('')
-  if ('text' in o) return o.text
-  if ('error' in o) return null
-  return String(v)
-}
 
 export function Importador() {
   const router = useRouter()
@@ -51,29 +40,11 @@ export function Importador() {
       const ExcelJS = (await import('exceljs')).default
       const wb = new ExcelJS.Workbook()
       await wb.xlsx.load(await file.arrayBuffer())
-      const encontradas: Aba[] = []
       const basesVistas = new Set<BaseId>()
-      wb.eachSheet((ws) => {
-        // O cabeçalho pode estar nas primeiras linhas (ex.: aba Base do FUP começa na linha 2).
-        for (let r = 1; r <= Math.min(6, ws.rowCount); r++) {
-          const valores = ws.getRow(r).values as unknown[]
-          const cabecalho = (Array.isArray(valores) ? valores.slice(1) : []).map(valorCelula)
-          const base = identificarBase(cabecalho)
-          if (!base) continue
-          const mapa = mapearColunas(base, cabecalho)
-          const linhas: Record<string, unknown>[] = []
-          ws.eachRow({ includeEmpty: false }, (row, n) => {
-            if (n <= r) return
-            const bruta = (row.values as unknown[]).slice(1).map(valorCelula)
-            const registro = converterLinha(base, mapa, bruta)
-            if (registro) linhas.push(registro)
-          })
-          if (linhas.length) {
-            encontradas.push({ nome: ws.name, base: base.id, linhas, colunasReconhecidas: mapa.length, selecionada: !basesVistas.has(base.id) })
-            basesVistas.add(base.id)
-          }
-          break
-        }
+      const encontradas: Aba[] = lerAbas(wb).map((aba) => {
+        const selecionada = !basesVistas.has(aba.base)
+        basesVistas.add(aba.base)
+        return { ...aba, selecionada }
       })
       if (!encontradas.length) setErro('Não reconheci nenhuma planilha. Confira se o cabeçalho é o mesmo exportado do SAP (ex.: "Ordem", "Nº reserva", "Status do item").')
       setAbas(encontradas)
