@@ -152,6 +152,9 @@ Function Existe(id)
   Existe = Not (session.findById(id, False) Is Nothing)
 End Function
 
+' Primeira coisa: anota que o robo abriu (se este arquivo nao aparecer, o script nao rodou).
+Registrar "Script aberto (versao 5) em " & PASTA
+
 ' ---------- 1. SAP aberto e logado ----------
 Dim SapGuiAuto, application, connection, session
 On Error Resume Next
