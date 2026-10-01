@@ -3,6 +3,8 @@ const nextConfig = {
   // exceljs roda no servidor (exportação); não precisa ser empacotado.
   serverExternalPackages: ['exceljs'],
   poweredByHeader: false,
+  // O script do robô é lido do disco pela rota de download.
+  outputFileTracingIncludes: { '/api/robo/script': ['./robo/**'] },
   async headers() {
     return [
       {

@@ -7,12 +7,14 @@ import { exigirUsuario, pode } from '@/lib/auth'
 import { LISTA_BASES, BASES, type BaseId } from '@/lib/bases'
 import { query } from '@/lib/db'
 import { statusAtualizacao } from '@/lib/consultas'
+import { PREFIXO_ROBO, tokenRobo } from '@/lib/robo'
 import { dataHora, numero } from '@/lib/formato'
 
 export const metadata = { title: 'Importar / Excel' }
 
 export default async function PaginaImportar() {
-  await exigirUsuario(pode.editar)
+  const usuario = await exigirUsuario(pode.editar)
+  const roboLigado = !!tokenRobo()
   const historico = await query<{
     id: number; base: BaseId; arquivo: string; iniciado_em: string; linhas: number; novas: number; alteradas: number; removidas: number; status: string; usuario: string | null
   }>(
@@ -56,7 +58,7 @@ export default async function PaginaImportar() {
                         <td className="num text-right">{numero(i.novas)}</td>
                         <td className="num text-right">{numero(i.alteradas)}</td>
                         <td className="num text-right">{numero(i.removidas)}</td>
-                        <td className="whitespace-nowrap text-muted">{i.usuario ?? '—'}</td>
+                        <td className="whitespace-nowrap text-muted">{i.usuario ?? (i.arquivo?.startsWith(PREFIXO_ROBO) ? 'Robô SAP' : '—')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -96,6 +98,25 @@ export default async function PaginaImportar() {
               </ol>
             ) : (
               <p className="text-sm text-muted">Configure a variável <code>EXPORT_TOKEN</code> (mínimo 16 caracteres) no Vercel para habilitar.</p>
+            )}
+          </Painel>
+
+          <Painel titulo="4. Robô do SAP" descricao="Exporta do SAP no PC da equipe e envia direto para cá. Cada envio aparece no histórico como “Robô SAP”.">
+            {!roboLigado ? (
+              <p className="text-sm text-muted">
+                Desligado. Para ligar, crie a variável <code>ROBO_TOKEN</code> na Vercel (uma senha longa, 24+ caracteres) e publique de novo.
+              </p>
+            ) : pode.administrar(usuario) ? (
+              <div className="space-y-3 text-sm text-ink-2">
+                <p>Ligado. Robôs disponíveis:</p>
+                <a className="btn w-full justify-between" href="/api/robo/script">
+                  <span>IW38 (cadastro das ordens)</span>
+                  <Download className="size-4" />
+                </a>
+                <p className="text-xs text-muted">O arquivo baixado já vem com a chave do robô: guarde só no PC que roda o SAP.</p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted">Ligado. Só o administrador baixa o robô.</p>
             )}
           </Painel>
         </div>

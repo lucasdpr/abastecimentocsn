@@ -48,7 +48,7 @@ export default async function PaginaMudancas({ params, searchParams }: { params:
       </Link>
       <Cabecalho
         titulo="O que mudou"
-        descricao={`${BASES[imp.base as BaseId]?.nome ?? imp.base} · ${dataHora(imp.concluido_em ?? imp.iniciado_em)} · ${imp.arquivo ?? ''}${imp.usuario ? ` · por ${imp.usuario}` : ''}`}
+        descricao={`${BASES[imp.base as BaseId]?.nome ?? imp.base} · ${dataHora(imp.concluido_em ?? imp.iniciado_em)} · ${imp.arquivo ?? ''}${imp.usuario ? ` · por ${imp.usuario}` : imp.arquivo?.startsWith('[Robô]') ? ' · pelo robô' : ''}`}
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
