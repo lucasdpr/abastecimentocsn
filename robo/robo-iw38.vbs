@@ -92,13 +92,17 @@ If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 
 ' ---------- 3. Exporta para planilha em pasta fixa ----------
+' O SAP abre a lista direto no Excel (nao salva em disco). Aqui pegamos essa
+' planilha aberta e salvamos em PASTA\ARQUIVO.
 If fso.FileExists(caminho) Then fso.DeleteFile caminho, True
 Dim grid
 Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
+On Error Resume Next
 grid.setCurrentCell -1, ""
+grid.selectAll
 grid.contextMenu
 grid.selectContextMenuItem "&XXL"
-' Janelas seguintes: formato da planilha e onde salvar
+' Janelas de confirmacao do SAP (formato da planilha etc.)
 For i = 1 To 8
   If Not Existe("wnd[1]") Then Exit For
   If Existe("wnd[1]/usr/ctxtDY_PATH") Then
@@ -109,35 +113,42 @@ For i = 1 To 8
   WScript.Sleep 500
 Next
 If Err.Number <> 0 Then Falhar "Falha ao exportar a planilha: " & Err.Description
-On Error GoTo 0
+Err.Clear
 
-' Espera o arquivo ficar pronto (ate 2 minutos)
-Dim espera, tamanho, anterior
-anterior = -1
-For espera = 1 To 120
+' Espera a planilha aparecer no Excel (ate 3 minutos) e salva
+Dim excel, wbExp, espera, ok
+ok = False
+For espera = 1 To 180
   If fso.FileExists(caminho) Then
-    tamanho = fso.GetFile(caminho).Size
-    If tamanho > 0 And tamanho = anterior Then Exit For
-    anterior = tamanho
+    ok = True
+    Exit For
   End If
+  Set excel = Nothing
+  Set excel = GetObject(, "Excel.Application")
+  If Err.Number = 0 Then
+    If excel.Workbooks.Count > 0 Then
+      ' Espera o SAP terminar de preencher a planilha
+      WScript.Sleep 4000
+      Set wbExp = excel.ActiveWorkbook
+      excel.DisplayAlerts = False
+      wbExp.SaveAs caminho, 51
+      If Err.Number = 0 Then
+        wbExp.Close False
+        ok = True
+        Exit For
+      End If
+    End If
+  End If
+  Err.Clear
   WScript.Sleep 1000
 Next
-If Not fso.FileExists(caminho) Then Falhar "O SAP nao salvou " & caminho & ". Confira a pasta e rode de novo."
-
-' Fecha a planilha se o SAP abriu no Excel (nao salva nada).
-' Usa o Excel que ja esta aberto; nunca abre um novo.
-On Error Resume Next
-WScript.Sleep 3000
-Dim excel, wb
-Set excel = GetObject(, "Excel.Application")
-If Err.Number = 0 Then
-  For Each wb In excel.Workbooks
-    If LCase(wb.FullName) = LCase(caminho) Then wb.Close False
-  Next
-End If
 Err.Clear
+If Not ok Or Not fso.FileExists(caminho) Then Falhar "O robo nao conseguiu salvar " & caminho & ". A planilha do SAP nao apareceu no Excel. Confira se o Excel esta instalado e rode de novo."
+
+' Volta o SAP para a tela inicial
 session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
 session.findById("wnd[0]").sendVKey 0
+Err.Clear
 On Error GoTo 0
 Registrar "Planilha exportada (" & Round(fso.GetFile(caminho).Size / 1024) & " KB)"
 
