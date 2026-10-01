@@ -21,7 +21,7 @@ Const DATA_DE = "13.09.2021"
 Const DATA_ATE = "31.12.2029"
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
-Dim fso, sh, silencioso, caminho, historico, PASTA
+Dim fso, sh, silencioso, caminho, historico, PASTA, PASTAS
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 silencioso = False
@@ -30,6 +30,11 @@ If WScript.Arguments.Count > 0 Then silencioso = (LCase(WScript.Arguments(0)) = 
 PASTA = fso.GetParentFolderName(WScript.ScriptFullName)
 caminho = PASTA & "\" & ARQUIVO
 historico = PASTA & "\historico.txt"
+' Onde o SAP pode gravar a planilha exportada (normalmente a Area de Trabalho).
+PASTAS = Array(sh.SpecialFolders("Desktop"), sh.SpecialFolders("MyDocuments"), _
+               sh.ExpandEnvironmentStrings("%USERPROFILE%\Downloads"), _
+               sh.ExpandEnvironmentStrings("%USERPROFILE%\Desktop"), _
+               sh.ExpandEnvironmentStrings("%USERPROFILE%\Documents\SAP\SAP GUI"), PASTA)
 
 Sub Registrar(msg)
   Dim f
@@ -44,108 +49,82 @@ Sub Falhar(msg)
   WScript.Quit 1
 End Sub
 
-' Acha, entre todos os arquivos abertos no Excel, a aba com a lista do SAP
-' (cabecalho com a coluna "Ordem" e mais de 100 linhas).
-Function AcharAbaSap(xl)
+' Procura, nas pastas onde o SAP costuma salvar, o arquivo .xlsx/.xls mais novo
+' gravado depois de "desde". Devolve o caminho ou "".
+Function AcharMaisNovo(desde)
   On Error Resume Next
-  Dim wb, ws, c
-  Set AcharAbaSap = Nothing
-  For Each wb In xl.Workbooks
-    For Each ws In wb.Worksheets
-      For c = 1 To 40
-        If InStr(1, CStr(ws.Cells(1, c).Value), "Ordem", 1) > 0 Then
-          If ws.UsedRange.Rows.Count > 100 Then
-            Set AcharAbaSap = ws
-            Exit Function
+  Dim i, arq, ext, melhorData
+  AcharMaisNovo = ""
+  melhorData = desde
+  For i = 0 To UBound(PASTAS)
+    If PASTAS(i) <> "" Then
+      If fso.FolderExists(PASTAS(i)) Then
+        For Each arq In fso.GetFolder(PASTAS(i)).Files
+          ext = LCase(fso.GetExtensionName(arq.Name))
+          If (ext = "xlsx" Or ext = "xls") And Left(arq.Name, 2) <> "~$" Then
+            If arq.DateLastModified >= melhorData Then
+              melhorData = arq.DateLastModified
+              AcharMaisNovo = arq.Path
+            End If
           End If
-        End If
-      Next
-    Next
+        Next
+      End If
+    End If
   Next
 End Function
 
-' Espera o SAP terminar de preencher a planilha no Excel e salva a aba de dados.
-' Devolve True se salvou. "motivo" explica onde parou (vai para o historico).
-Function EsperarESalvar(destino, ByRef motivo)
+' Espera o SAP gravar a planilha e o arquivo parar de crescer. Devolve o caminho ou "".
+Function EsperarArquivo(desde, ByRef motivo)
   On Error Resume Next
-  Dim xl, aba, linhas, antes, estavel, tentativa, ok
-  EsperarESalvar = False
+  Dim t, achado, tamanho, antes, estavel
+  EsperarArquivo = ""
   antes = -1
   estavel = 0
-  tentativa = 0
-  motivo = "Excel ainda nao abriu"
-  Do While tentativa < 420
-    tentativa = tentativa + 1
+  t = 0
+  motivo = "o SAP ainda nao gravou a planilha"
+  Do While t < 600
+    t = t + 1
     Err.Clear
-    Set xl = Nothing
-    Set xl = GetObject(, "Excel.Application")
-    If Err.Number <> 0 Then
-      motivo = "nao achei o Excel aberto"
-    Else
-      Set aba = Nothing
-      Set aba = AcharAbaSap(xl)
-      If aba Is Nothing Then
-        motivo = "Excel aberto, mas sem a lista do SAP ainda"
+    achado = AcharMaisNovo(desde)
+    If achado <> "" Then
+      tamanho = -1
+      tamanho = fso.GetFile(achado).Size
+      If tamanho > 0 And tamanho = antes Then
+        estavel = estavel + 1
       Else
-        linhas = -1
-        linhas = aba.UsedRange.Rows.Count
-        If linhas < 0 Then
-          motivo = "Excel ocupado"
-          estavel = 0
-        ElseIf linhas = antes Then
-          estavel = estavel + 1
-        Else
-          estavel = 0
-          motivo = "SAP ainda preenchendo a planilha (" & linhas & " linhas)"
-        End If
-        antes = linhas
-        If estavel >= 3 Then
-          ok = SalvarAba(xl, aba, destino, motivo)
-          If ok Then
-            EsperarESalvar = True
-            Exit Function
-          End If
-          estavel = 0
-        End If
+        estavel = 0
+        motivo = "gravando " & fso.GetFileName(achado) & " (" & Round(tamanho / 1024) & " KB)"
       End If
+      antes = tamanho
+      If estavel >= 6 Then
+        EsperarArquivo = achado
+        Exit Function
+      End If
+    Else
+      antes = -1
+      estavel = 0
     End If
-    If tentativa Mod 15 = 0 Then Registrar "Aguardando a planilha (" & tentativa & "s): " & motivo
+    If t Mod 15 = 0 Then Registrar "Aguardando a planilha (" & t & "s): " & motivo
     WScript.Sleep 1000
   Loop
 End Function
 
-' Copia a aba de dados para um arquivo novo (sem a tabela dinamica do SAP) e salva.
-Function SalvarAba(xl, aba, destino, ByRef motivo)
+' Copia o arquivo (o Excel pode estar com ele aberto: tenta algumas vezes).
+Function CopiarArquivo(origem, destino)
   On Error Resume Next
-  Dim livroSap, novo
-  SalvarAba = False
-  Set livroSap = aba.Parent
-  xl.DisplayAlerts = False
-  Err.Clear
-  aba.Copy
-  If Err.Number = 0 Then
-    Set novo = xl.ActiveWorkbook
-    novo.SaveAs destino, 51
-    If Err.Number = 0 Then
-      novo.Close False
-      SalvarAba = True
-    Else
-      motivo = "falha ao salvar a copia (" & Err.Description & ")"
-    End If
-  Else
-    motivo = "falha ao copiar a aba (" & Err.Description & ")"
+  Dim n
+  CopiarArquivo = False
+  n = 0
+  Do While n < 30
+    n = n + 1
     Err.Clear
-    livroSap.SaveCopyAs destino
+    fso.CopyFile origem, destino, True
     If Err.Number = 0 Then
-      SalvarAba = True
-    Else
-      motivo = motivo & " / SaveCopyAs: " & Err.Description
+      CopiarArquivo = True
+      Exit Function
     End If
-  End If
-  If SalvarAba Then
-    Err.Clear
-    livroSap.Close False
-  End If
+    WScript.Sleep 2000
+  Loop
 End Function
 
 Function Existe(id)
@@ -153,7 +132,7 @@ Function Existe(id)
 End Function
 
 ' Primeira coisa: anota que o robo abriu (se este arquivo nao aparecer, o script nao rodou).
-Registrar "Script aberto (versao 6) em " & PASTA
+Registrar "Script aberto (versao 7) em " & PASTA
 If Not silencioso Then sh.Popup "Robo IW38 iniciado. Procurando o SAP...", 3, "Robo IW38", 64 + 4096
 
 ' ---------- 1. SAP aberto e logado ----------
@@ -199,11 +178,13 @@ session.findById("wnd[0]/tbar[1]/btn[8]").press
 If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_1").press
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 
-' ---------- 3. Exporta para planilha em pasta fixa ----------
-' O SAP abre a lista direto no Excel (nao salva em disco). Esperamos o SAP
-' terminar de preencher a planilha e salvamos so a aba com os dados em
-' PASTA\ARQUIVO.
+' ---------- 3. Exporta para planilha ----------
+' O SAP grava a planilha sozinho (nome tipo "Planilha em Basis (1).xlsx") e
+' depois abre no Excel. O robo NAO mexe no Excel: espera esse arquivo aparecer
+' e parar de crescer, e copia para PASTA\ARQUIVO.
 If fso.FileExists(caminho) Then fso.DeleteFile caminho, True
+Dim inicioExport
+inicioExport = DateAdd("s", -5, Now)
 Dim grid
 Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
 On Error Resume Next
@@ -211,7 +192,7 @@ grid.setCurrentCell -1, ""
 grid.selectAll
 grid.contextMenu
 grid.selectContextMenuItem "&XXL"
-' Janelas de confirmacao do SAP (aplicativo: Microsoft Excel etc.)
+' Janelas de confirmacao do SAP (aplicativo: Microsoft Excel, nome do arquivo etc.)
 For i = 1 To 8
   If Not Existe("wnd[1]") Then Exit For
   If Existe("wnd[1]/usr/ctxtDY_PATH") Then
@@ -224,12 +205,15 @@ Next
 If Err.Number <> 0 Then Falhar "Falha ao exportar a planilha: " & Err.Description
 Err.Clear
 
-' Espera a planilha do SAP aparecer no Excel, terminar de carregar, e salva.
-Dim salvou, motivoFinal
-salvou = EsperarESalvar(caminho, motivoFinal)
+Dim origem, motivoFinal
+origem = EsperarArquivo(inicioExport, motivoFinal)
 Err.Clear
-If Not salvou Or Not fso.FileExists(caminho) Then
-  Falhar "O robo nao conseguiu salvar " & caminho & "." & vbCrLf & "Ultimo estado: " & motivoFinal & vbCrLf & vbCrLf & "Feche o Excel e rode de novo. Se repetir, mande este texto e o arquivo historico.txt."
+If origem = "" Then
+  Falhar "O robo nao achou a planilha que o SAP deveria ter gravado." & vbCrLf & "Ultimo estado: " & motivoFinal & vbCrLf & vbCrLf & "Se o Excel abriu com a planilha, me mande o nome do arquivo (barra de titulo do Excel) e o arquivo historico.txt."
+End If
+Registrar "Planilha do SAP: " & origem
+If LCase(origem) <> LCase(caminho) Then
+  If Not CopiarArquivo(origem, caminho) Then Falhar "Achei a planilha (" & origem & "), mas nao consegui copiar para " & caminho & "." & vbCrLf & "Feche o Excel e rode de novo."
 End If
 
 ' Volta o SAP para a tela inicial
