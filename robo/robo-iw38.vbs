@@ -200,12 +200,27 @@ Sub EnviarHttp(arquivo, ByRef status, ByRef texto, ByRef erro)
   EscreverTexto corpo, "--" & limite & vbCrLf & _
     "Content-Disposition: form-data; name=""arquivo""; filename=""IW38.xlsx""" & vbCrLf & _
     "Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" & vbCrLf & vbCrLf
+  ' O SAP abre a planilha no Excel, que trava o arquivo: le uma copia.
+  Dim copia
+  copia = PASTA & "\envio.tmp"
+  fso.CopyFile arquivo, copia, True
+  If Err.Number <> 0 Then
+    erro = "nao consegui copiar a planilha (feche o Excel): " & Err.Description
+    Err.Clear
+    Exit Sub
+  End If
   Set dados = CreateObject("ADODB.Stream")
   dados.Type = 1
   dados.Open
-  dados.LoadFromFile arquivo
+  dados.LoadFromFile copia
+  If Err.Number <> 0 Or dados.Size = 0 Then
+    erro = "nao consegui ler a planilha: " & Err.Description
+    Err.Clear
+    Exit Sub
+  End If
   dados.CopyTo corpo
   dados.Close
+  fso.DeleteFile copia, True
   EscreverTexto corpo, vbCrLf & "--" & limite & "--" & vbCrLf
   corpo.Position = 0
   Set http = CreateObject("MSXML2.XMLHTTP.6.0")
