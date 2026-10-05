@@ -120,11 +120,12 @@ End If
 If Err.Number <> 0 Then Falhar "Falha ao exportar a planilha: " & Err.Description
 On Error GoTo 0
 
-' Espera o arquivo ficar pronto (ate 3 minutos). Aceita o nome que o SAP usar (ex.: export.XLSX).
+' Espera o arquivo ficar pronto (ate 10 minutos). Aceita o nome que o SAP usar (ex.: export.XLSX).
+' Na 1a vez o SAP pergunta "Permitir o acesso a esse file?": clicar Permitir e marcar "Memorizar minha decisao".
 Dim espera, tamanho, anterior
 anterior = -1
 caminho = ""
-For espera = 1 To 180
+For espera = 1 To 600
   For Each arq In fso.GetFolder(PASTA).Files
     If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" Then caminho = arq.Path
   Next
@@ -136,6 +137,8 @@ For espera = 1 To 180
   WScript.Sleep 1000
 Next
 If caminho = "" Then Falhar "O SAP nao salvou nenhuma planilha .xlsx em " & PASTA & ". Veja se alguma janela ficou aberta no SAP."
+If fso.GetFile(caminho).Size < 10240 Then Falhar "A planilha ficou vazia (" & caminho & ")." & vbCrLf & _
+  "Se o SAP perguntou 'Permitir o acesso a esse file?', clique Permitir e marque 'Memorizar minha decisao'. Depois rode de novo."
 
 On Error Resume Next
 session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
@@ -144,24 +147,86 @@ On Error GoTo 0
 Registrar "Planilha exportada (" & Round(fso.GetFile(caminho).Size / 1024) & " KB)"
 
 ' ---------- 4. Envia para o app ----------
-Dim resposta, cmd, codigo, texto, f
-resposta = PASTA & "\resposta.txt"
-If fso.FileExists(resposta) Then fso.DeleteFile resposta, True
-cmd = "cmd /c curl.exe -sS --ssl-no-revoke --max-time 300 -w ""\nHTTP %{http_code}"" " & _
-      "-H ""Authorization: Bearer " & TOKEN & """ " & _
-      "-F ""arquivo=@" & caminho & """ " & _
-      """" & URL_APP & "/api/robo/importar"" > """ & resposta & """ 2>&1"
-codigo = sh.Run(cmd, 0, True)
-texto = ""
-If fso.FileExists(resposta) Then
-  Set f = fso.OpenTextFile(resposta, 1)
-  If Not f.AtEndOfStream Then texto = f.ReadAll
-  f.Close
-End If
-If codigo <> 0 Or InStr(texto, "HTTP 200") = 0 Then
-  Falhar "O envio para o app falhou." & vbCrLf & vbCrLf & texto
+' Usa a mesma conexao do navegador (proxy da empresa). Se falhar, tenta pelo curl.
+Dim status, texto, erroHttp
+EnviarHttp caminho, status, texto, erroHttp
+If status <> 200 Then
+  Dim resposta, cmd, codigo, f, textoCurl
+  resposta = PASTA & "\resposta.txt"
+  If fso.FileExists(resposta) Then fso.DeleteFile resposta, True
+  cmd = "cmd /c curl.exe -sS --ssl-no-revoke --max-time 300 -w ""\nHTTP %{http_code}"" " & _
+        "-H ""Authorization: Bearer " & TOKEN & """ " & _
+        "-F ""arquivo=@" & caminho & """ " & _
+        """" & URL_APP & "/api/robo/importar"" > """ & resposta & """ 2>&1"
+  codigo = sh.Run(cmd, 0, True)
+  textoCurl = ""
+  If fso.FileExists(resposta) Then
+    Set f = fso.OpenTextFile(resposta, 1)
+    If Not f.AtEndOfStream Then textoCurl = f.ReadAll
+    f.Close
+  End If
+  If codigo <> 0 Or InStr(textoCurl, "HTTP 200") = 0 Then
+    Falhar "O envio para o app falhou." & vbCrLf & vbCrLf & _
+      "Pela conexao do Windows: " & erroHttp & " " & texto & vbCrLf & vbCrLf & _
+      "Pelo curl: " & textoCurl & vbCrLf & vbCrLf & _
+      "Teste: abra " & URL_APP & " no navegador deste PC."
+  End If
+  texto = Replace(textoCurl, vbLf & "HTTP 200", "")
 End If
 
-texto = Replace(texto, vbLf & "HTTP 200", "")
 Registrar texto
 If Not silencioso Then MsgBox "Pronto. O app foi atualizado:" & vbCrLf & vbCrLf & texto, vbInformation, "Robo IW38"
+
+' Envia a planilha (multipart, campo "arquivo") usando a conexao do Windows (mesma do navegador).
+Sub EnviarHttp(arquivo, ByRef status, ByRef texto, ByRef erro)
+  Dim limite, corpo, dados, http
+  status = 0 : texto = "" : erro = ""
+  On Error Resume Next
+  limite = "----RoboIW38" & Replace(CStr(Timer), ",", "")
+  limite = Replace(limite, ".", "")
+  Set corpo = CreateObject("ADODB.Stream")
+  corpo.Type = 1
+  corpo.Open
+  EscreverTexto corpo, "--" & limite & vbCrLf & _
+    "Content-Disposition: form-data; name=""arquivo""; filename=""IW38.xlsx""" & vbCrLf & _
+    "Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" & vbCrLf & vbCrLf
+  Set dados = CreateObject("ADODB.Stream")
+  dados.Type = 1
+  dados.Open
+  dados.LoadFromFile arquivo
+  dados.CopyTo corpo
+  dados.Close
+  EscreverTexto corpo, vbCrLf & "--" & limite & "--" & vbCrLf
+  corpo.Position = 0
+  Set http = CreateObject("MSXML2.XMLHTTP.6.0")
+  If Err.Number <> 0 Then
+    Err.Clear
+    Set http = CreateObject("MSXML2.XMLHTTP")
+  End If
+  http.open "POST", URL_APP & "/api/robo/importar", False
+  http.setRequestHeader "Authorization", "Bearer " & TOKEN
+  http.setRequestHeader "Content-Type", "multipart/form-data; boundary=" & limite
+  http.send corpo.Read
+  corpo.Close
+  If Err.Number <> 0 Then
+    erro = "erro " & Hex(Err.Number) & " " & Err.Description
+    Err.Clear
+    Exit Sub
+  End If
+  status = http.status
+  texto = http.responseText
+  If status <> 200 Then erro = "HTTP " & status
+End Sub
+
+Sub EscreverTexto(destino, textoAscii)
+  Dim t
+  Set t = CreateObject("ADODB.Stream")
+  t.Type = 2
+  t.Charset = "us-ascii"
+  t.Open
+  t.WriteText textoAscii
+  t.Position = 0
+  t.Type = 1
+  destino.Write t.Read
+  t.Close
+End Sub
