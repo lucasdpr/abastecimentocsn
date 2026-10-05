@@ -5,7 +5,8 @@ import { FormAcompanhamento } from '@/components/form-acompanhamento'
 import { SeloParada, SeloSituacao } from '@/components/selos'
 import { Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { configuracoes, detalheOrdem, type OrdemSap } from '@/lib/consultas'
+import { PainelResponsaveis } from '@/components/responsaveis'
+import { configuracoes, detalheOrdem, responsaveisGrupos, type OrdemSap, type ResponsavelGrupo } from '@/lib/consultas'
 import { data, dataHora, moeda, numero } from '@/lib/formato'
 
 type Item = {
@@ -38,10 +39,10 @@ export async function generateMetadata({ params }: { params: Promise<{ ordem: st
 export default async function PaginaOrdem({ params }: { params: Promise<{ ordem: string }> }) {
   const usuario = await exigirUsuario()
   const { ordem } = await params
-  const [d, cfg] = await Promise.all([detalheOrdem(decodeURIComponent(ordem)), configuracoes()])
+  const [d, cfg, resp] = await Promise.all([detalheOrdem(decodeURIComponent(ordem)), configuracoes(), responsaveisGrupos()])
   if (!d.resumo && !d.sap) notFound()
   // OM que só existe na IW38 (sem itens de material na base de Ordens).
-  if (!d.resumo) return <SomenteSap sap={d.sap!} eventos={d.eventos} />
+  if (!d.resumo) return <SomenteSap sap={d.sap!} eventos={d.eventos} grupo={resp.get(d.sap!.grp_planejamento ?? '')} />
   const o = d.resumo
   const itens = d.itens as Item[]
 
@@ -120,6 +121,7 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
         </div>
 
         <div className="min-w-0 space-y-4">
+          <PainelResponsaveis gpm={o.grp_planejamento} grupo={resp.get(o.grp_planejamento ?? '')} />
           {pode.editar(usuario) ? (
             <Painel titulo="Acompanhamento da Central" descricao={o.cobrancas ? `${o.cobrancas} cobrança(s) · última em ${dataHora(o.ultima_cobranca_em)}` : 'Nenhuma cobrança registrada.'}>
               <FormAcompanhamento ordem={o.ordem} situacao={o.situacao} setor={o.setor_responsavel} observacao={o.observacao} />
@@ -182,7 +184,7 @@ function PainelSap({ sap }: { sap: OrdemSap }) {
 }
 
 /** OM que existe na IW38 mas não tem itens de material importados. */
-function SomenteSap({ sap, eventos }: { sap: OrdemSap; eventos: Array<{ tipo: string; descricao: string; criado_em: string; usuario: string | null }> }) {
+function SomenteSap({ sap, eventos, grupo }: { grupo?: ResponsavelGrupo; sap: OrdemSap; eventos: Array<{ tipo: string; descricao: string; criado_em: string; usuario: string | null }> }) {
   return (
     <>
       <Link href="/ordens" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
@@ -203,7 +205,8 @@ function SomenteSap({ sap, eventos }: { sap: OrdemSap; eventos: Array<{ tipo: st
           <PainelSap sap={sap} />
           <Vazio texto="Esta OM não tem itens de material na base de Ordens (reservas)." />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-4">
+          <PainelResponsaveis gpm={sap.grp_planejamento} grupo={grupo} />
           <Painel titulo="Histórico">
             {eventos.length ? (
               <ol className="space-y-3">
