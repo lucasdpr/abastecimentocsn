@@ -1,7 +1,7 @@
 ' =====================================================================
 '  Robo IW38 - Central de Abastecimento
 '  1) Exporta a IW38 do SAP (SAP precisa estar ABERTO e LOGADO)
-'  2) Salva em C:\RoboAbastecimento\IW38.xlsx
+'  2) Salva em Desktop\robo IW38\IW38.xlsx (formato XLSX, direto em arquivo)
 '  3) Envia para o app, que atualiza e registra "O que mudou"
 '
 '  Uso: dois cliques. Para rodar sem janelas (Agendador do Windows):
@@ -15,16 +15,18 @@ Option Explicit
 
 Const URL_APP = "{{URL_APP}}"
 Const TOKEN = "{{TOKEN}}"
-Const PASTA = "C:\RoboAbastecimento"
+Dim PASTA
 Const ARQUIVO = "IW38.xlsx"
 Const LAYOUT = "/CLAUDINEIA"
 Const DATA_DE = "13.09.2021"
-Const DATA_ATE = "31.12.2029"
+Const DATA_ATE = "21.12.2029"
+Const FORMATO_XLSX = "10"
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
 Dim fso, sh, silencioso, caminho, historico
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
+PASTA = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\Desktop\robo IW38"
 silencioso = False
 If WScript.Arguments.Count > 0 Then silencioso = (LCase(WScript.Arguments(0)) = "/silencioso")
 If Not fso.FolderExists(PASTA) Then fso.CreateFolder PASTA
@@ -66,7 +68,7 @@ If Not silencioso Then
 End If
 Registrar "Inicio"
 
-' ---------- 2. IW38 com os filtros ----------
+' ---------- 2. IW38 com os filtros (igual a gravacao feita no SAP) ----------
 On Error Resume Next
 session.findById("wnd[0]").maximize
 session.findById("wnd[0]/tbar[0]/okcd").text = "/nIW38"
@@ -81,7 +83,6 @@ For i = 0 To UBound(GRUPOS)
 Next
 session.findById("wnd[1]/tbar[0]/btn[8]").press
 session.findById("wnd[0]/usr/ctxtVARIANT").text = LAYOUT
-session.findById("wnd[0]").sendVKey 0
 If Err.Number <> 0 Then Falhar "Falha ao preencher a tela da IW38: " & Err.Description
 Err.Clear
 
@@ -91,51 +92,52 @@ session.findById("wnd[0]/tbar[1]/btn[8]").press
 If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_1").press
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 
-' ---------- 3. Exporta para planilha em pasta fixa ----------
-If fso.FileExists(caminho) Then fso.DeleteFile caminho, True
+' ---------- 3. Exporta direto para arquivo XLSX na pasta ----------
+' Limpa exportacoes antigas para nao confundir com a nova.
+Dim arq
+For Each arq In fso.GetFolder(PASTA).Files
+  If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" Then fso.DeleteFile arq.Path, True
+Next
 Dim grid
 Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
 grid.setCurrentCell -1, ""
+grid.selectAll
 grid.contextMenu
 grid.selectContextMenuItem "&XXL"
-' Janelas seguintes: formato da planilha e onde salvar
-For i = 1 To 8
-  If Not Existe("wnd[1]") Then Exit For
-  If Existe("wnd[1]/usr/ctxtDY_PATH") Then
-    session.findById("wnd[1]/usr/ctxtDY_PATH").text = PASTA
-    session.findById("wnd[1]/usr/ctxtDY_FILENAME").text = ARQUIVO
-  End If
+' 1a janela: formato do arquivo (10 = XLSX, igual a gravacao)
+If Existe("wnd[1]/usr/cmbG_LISTBOX") Then
+  session.findById("wnd[1]/usr/cmbG_LISTBOX").key = FORMATO_XLSX
   session.findById("wnd[1]/tbar[0]/btn[0]").press
-  WScript.Sleep 500
-Next
+End If
+' 2a janela: pasta e nome do arquivo
+If Existe("wnd[1]/usr/ctxtDY_PATH") Then
+  session.findById("wnd[1]/usr/ctxtDY_PATH").text = PASTA
+  If Existe("wnd[1]/usr/ctxtDY_FILENAME") Then session.findById("wnd[1]/usr/ctxtDY_FILENAME").text = ARQUIVO
+  session.findById("wnd[1]/tbar[0]/btn[0]").press
+Else
+  Registrar "Aviso: janela de pasta nao apareceu como esperado"
+End If
 If Err.Number <> 0 Then Falhar "Falha ao exportar a planilha: " & Err.Description
 On Error GoTo 0
 
-' Espera o arquivo ficar pronto (ate 2 minutos)
+' Espera o arquivo ficar pronto (ate 3 minutos). Aceita o nome que o SAP usar (ex.: export.XLSX).
 Dim espera, tamanho, anterior
 anterior = -1
-For espera = 1 To 120
-  If fso.FileExists(caminho) Then
+caminho = ""
+For espera = 1 To 180
+  For Each arq In fso.GetFolder(PASTA).Files
+    If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" Then caminho = arq.Path
+  Next
+  If caminho <> "" Then
     tamanho = fso.GetFile(caminho).Size
     If tamanho > 0 And tamanho = anterior Then Exit For
     anterior = tamanho
   End If
   WScript.Sleep 1000
 Next
-If Not fso.FileExists(caminho) Then Falhar "O SAP nao salvou " & caminho & ". Confira a pasta e rode de novo."
+If caminho = "" Then Falhar "O SAP nao salvou nenhuma planilha .xlsx em " & PASTA & ". Veja se alguma janela ficou aberta no SAP."
 
-' Fecha a planilha se o SAP abriu no Excel (nao salva nada).
-' Usa o Excel que ja esta aberto; nunca abre um novo.
 On Error Resume Next
-WScript.Sleep 3000
-Dim excel, wb
-Set excel = GetObject(, "Excel.Application")
-If Err.Number = 0 Then
-  For Each wb In excel.Workbooks
-    If LCase(wb.FullName) = LCase(caminho) Then wb.Close False
-  Next
-End If
-Err.Clear
 session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
 session.findById("wnd[0]").sendVKey 0
 On Error GoTo 0
