@@ -164,7 +164,8 @@ export async function listarOrdens({ busca, filtro, grupo, pagina = 1 }: FiltroO
     params.push(grupo)
     where.push(`o.grp_planejamento = $${params.length}`)
   }
-  if (filtro === 'abertas' || !filtro) where.push('o.itens_abertos > 0')
+  // Com busca, procura em todas as ordens (inclusive atendidas/encerradas), salvo se um filtro foi escolhido.
+  if (filtro === 'abertas' || (!filtro && !busca?.trim())) where.push('o.itens_abertos > 0')
   if (filtro === 'paradas') where.push(ORDEM_PARADA_SQL)
   if (filtro === 'vencidas') where.push('o.itens_abertos > 0 and o.necessidade_mais_antiga < current_date')
   if (filtro === 'cobradas') where.push("a.situacao in ('cobrado', 'aguardando')")
@@ -183,7 +184,17 @@ export async function listarOrdens({ busca, filtro, grupo, pagina = 1 }: FiltroO
       params,
     ),
   ])
-  return { linhas, total: total?.total ?? 0, porPagina, cfg }
+  // OMs que só existem na IW38 (sem itens de material), por exemplo as já encerradas.
+  const soSap = busca?.trim() && !filtro && !grupo && pagina === 1
+    ? await query<{ ordem: string; texto: string | null; grp_planejamento: string | null; local_instalacao: string | null; status_sistema: string | null }>(
+        `select s.ordem, s.texto, s.grp_planejamento, s.local_instalacao, s.status_sistema from ordens_sap s
+          where s.removido_em is null and not exists (select 1 from ordens_resumo o where o.ordem = s.ordem)
+            and (s.ordem ilike $1 or s.texto ilike $1 or s.local_instalacao ilike $1)
+          order by s.ordem limit 50`,
+        [`%${busca.trim()}%`],
+      ).catch(() => [])
+    : []
+  return { linhas, total: total?.total ?? 0, porPagina, cfg, soSap }
 }
 
 export async function gruposPlanejamento() {
