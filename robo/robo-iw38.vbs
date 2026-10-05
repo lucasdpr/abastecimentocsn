@@ -95,9 +95,11 @@ If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao re
 ' ---------- 3. Exporta direto para arquivo XLSX na pasta ----------
 ' Limpa exportacoes antigas para nao confundir com a nova.
 Dim arq
+On Error Resume Next
 For Each arq In fso.GetFolder(PASTA).Files
   If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" Then fso.DeleteFile arq.Path, True
 Next
+Err.Clear
 Dim grid
 Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
 grid.setCurrentCell -1, ""
@@ -126,12 +128,20 @@ Dim espera, tamanho, anterior
 anterior = -1
 caminho = ""
 For espera = 1 To 600
+  ' Ignora o arquivo temporario do Excel (~$IW38.xlsx) e pega a maior planilha.
+  caminho = ""
   For Each arq In fso.GetFolder(PASTA).Files
-    If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" Then caminho = arq.Path
+    If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" And Left(arq.Name, 2) <> "~$" Then
+      If caminho = "" Then
+        caminho = arq.Path
+      ElseIf arq.Size > fso.GetFile(caminho).Size Then
+        caminho = arq.Path
+      End If
+    End If
   Next
   If caminho <> "" Then
     tamanho = fso.GetFile(caminho).Size
-    If tamanho > 0 And tamanho = anterior Then Exit For
+    If tamanho >= 10240 And tamanho = anterior Then Exit For
     anterior = tamanho
   End If
   WScript.Sleep 1000
