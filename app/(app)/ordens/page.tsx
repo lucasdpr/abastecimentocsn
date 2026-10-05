@@ -15,7 +15,7 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
   await exigirUsuario()
   const sp = await searchParams
   const pagina = Math.max(1, Number(sp.pagina) || 1)
-  const [{ linhas, total, porPagina, cfg }, grupos, resp] = await Promise.all([
+  const [{ linhas, total, porPagina, cfg, soSap }, grupos, resp] = await Promise.all([
     listarOrdens({ busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo, pagina }),
     gruposPlanejamento(),
     responsaveisGrupos(),
@@ -29,10 +29,10 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
         <Busca placeholder="Ex.: 80008117069, ANEL VITON, G-CSN-10…" valor={sp.busca} ocultos={{ filtro: sp.filtro, grupo: sp.grupo }} />
         <Filtros
           base="/ordens"
-          parametros={parametros}
+          parametros={{ ...parametros, filtro: sp.filtro ?? (sp.busca ? 'todas' : undefined) }}
           chave="filtro"
           opcoes={[
-            { valor: '', rotulo: 'Em aberto' },
+            { valor: sp.busca ? 'abertas' : '', rotulo: 'Em aberto' },
             { valor: 'paradas', rotulo: `Paradas ≥ ${cfg.diasSemMovimentacao}d` },
             { valor: 'vencidas', rotulo: 'Necessidade vencida' },
             { valor: 'cobradas', rotulo: 'Cobradas' },
@@ -45,12 +45,16 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
         )}
       </div>
 
-      <p className="mb-2 text-xs text-muted">{numero(total)} ordens</p>
+      <p className="mb-2 text-xs text-muted">
+        {numero(total)} ordens{sp.busca && !sp.filtro && ` · busca em todas as ordens, inclusive atendidas${soSap.length ? ` e encerradas só na IW38 (${soSap.length})` : ''}`}
+      </p>
 
-      {!linhas.length ? (
+      {!linhas.length && !soSap.length ? (
         <Vazio texto={sp.busca ? 'Nenhuma ordem encontrada para essa busca.' : 'Nenhuma ordem neste filtro.'} />
       ) : (
         <>
+          {linhas.length > 0 && (
+            <>
           {/* Mobile */}
           <ul className="space-y-2 md:hidden">
             {linhas.map((o) => (
@@ -127,7 +131,25 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
               </tbody>
             </table>
           </div>
+            </>
+          )}
           <Paginacao base="/ordens" parametros={parametros} pagina={pagina} total={total} porPagina={porPagina} />
+          {soSap.length > 0 && (
+            <section className="mt-6">
+              <h2 className="mb-2 text-sm font-semibold">Só na IW38 (sem itens de material)</h2>
+              <ul className="card divide-y divide-line overflow-hidden">
+                {soSap.map((s) => (
+                  <li key={s.ordem}>
+                    <Link href={`/ordens/${s.ordem}`} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2/60">
+                      <span className="codigo font-medium text-accent">{s.ordem}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{s.texto ?? '—'}</span>
+                      <span className="hidden text-xs text-muted sm:inline">{s.grp_planejamento}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </>
