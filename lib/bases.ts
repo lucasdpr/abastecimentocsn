@@ -16,7 +16,7 @@ export type Campo = {
   app?: boolean
 }
 
-export type BaseId = 'ordens' | 'fup' | 'ativacao' | 'reservas' | 'iw38'
+export type BaseId = 'ordens' | 'fup' | 'ativacao' | 'reservas' | 'iw38' | 'grupos'
 
 export type Base = {
   id: BaseId
@@ -31,6 +31,8 @@ export type Base = {
   campos: Campo[]
   /** Monta a chave quando ela não vem pronta na planilha. */
   derivarChave?: (linha: Record<string, unknown>) => Record<string, unknown>
+  /** Linhas que não são dados (ex.: cabeçalho repetido no meio da aba). */
+  ignorar?: (linha: Record<string, unknown>) => boolean
 }
 
 const c = (campo: string, tipo: TipoCampo, ...cabecalhos: string[]): Campo => ({ campo, tipo, cabecalhos })
@@ -188,6 +190,27 @@ export const BASES: Record<BaseId, Base> = {
       c('custo_planejado', 'numero', 'CustTotPl.'),
     ],
   },
+  grupos: {
+    id: 'grupos',
+    nome: 'Grupos de planejamento',
+    descricao: 'Aba "Grupo de Planejamento": quem é o responsável (gerência, supervisor, inspetor e abastecimento) por cada grupo.',
+    tabela: 'grupos_planejamento',
+    chave: ['gpm'],
+    assinatura: ['GPM', 'Matrícula Supervisor', 'Matrícula Abastecimento'],
+    // A aba repete o cabeçalho no meio (um bloco por equipamento).
+    ignorar: (r) => String(r.gpm ?? '').toUpperCase() === 'GPM',
+    campos: [
+      c('gpm', 'texto', 'GPM'),
+      c('gerencia', 'texto', 'Gerênica', 'Gerência', 'Gerencia'),
+      c('equipamento', 'texto', 'Equipamento'),
+      c('matricula_supervisor', 'texto', 'Matrícula Supervisor'),
+      c('supervisor', 'texto', 'Supervisor'),
+      c('matricula_inspetor', 'texto', 'Matrícula Inspetor'),
+      c('inspetor', 'texto', 'Inspetor'),
+      c('matricula_abastecimento', 'texto', 'Matrícula Abastecimento'),
+      c('abastecimento', 'texto', 'Abastecimento'),
+    ],
+  },
   reservas: {
     id: 'reservas',
     nome: 'Reservas',
@@ -315,5 +338,6 @@ export function converterLinha(base: Base, mapa: ReturnType<typeof mapearColunas
   const registro: Record<string, unknown> = {}
   for (const { indice, campo } of mapa) registro[campo.campo] = converterValor(campo.tipo, linha[indice])
   if (base.derivarChave) Object.assign(registro, base.derivarChave(registro))
+  if (base.ignorar?.(registro)) return null
   return base.chave.every((k) => registro[k] != null && registro[k] !== '') ? registro : null
 }

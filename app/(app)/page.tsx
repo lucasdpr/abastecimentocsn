@@ -4,12 +4,12 @@ import { TriangleAlert, ArrowRight, BellRing, CalendarCheck, CalendarX2, CircleQ
 import { GraficoRetornoSemanal } from '@/components/graficos'
 import { AvisoAtualizacao, Barras, Cabecalho, Composicao, Kpi, Medidor, Painel, Selo, Vazio } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { painel, statusAtualizacao } from '@/lib/consultas'
-import { data, dataHora, moeda, moedaCurta, numero, pct } from '@/lib/formato'
+import { painel, responsaveisGrupos, statusAtualizacao } from '@/lib/consultas'
+import { data, dataHora, moeda, moedaCurta, nomeCurto, numero, pct } from '@/lib/formato'
 
 export const metadata = { title: 'Painel' }
 
-const NOME_BASE: Record<string, string> = { ordens: 'Ordens', iw38: 'IW38', fup: 'Follow-up', ativacao: 'Ativação', reservas: 'Reservas' }
+const NOME_BASE: Record<string, string> = { ordens: 'Ordens', iw38: 'IW38', grupos: 'Grupos', fup: 'Follow-up', ativacao: 'Ativação', reservas: 'Reservas' }
 
 // Status de sistema padrão do SAP PM. Os de usuário são do perfil da CSN e aparecem só como código.
 const FASE_SISTEMA: Record<string, string> = { ABER: 'Aberta', LIB: 'Liberada', ENTE: 'Encerrada tecnicamente', ENCE: 'Encerrada' }
@@ -33,7 +33,7 @@ const APROVACAO: Record<string, { cor: string; icone?: typeof Clock }> = {
 export default async function PaginaPainel() {
   const usuario = await exigirUsuario()
   if (!pode.verGestao(usuario)) redirect('/ordens')
-  const [d, atualizacao] = await Promise.all([painel(), statusAtualizacao()])
+  const [d, atualizacao, resp] = await Promise.all([painel(), statusAtualizacao(), responsaveisGrupos()])
   const r = d.resumo
   const f = d.fupResumo
   const semDados = r.total === 0 && f.itens === 0
@@ -146,6 +146,7 @@ export default async function PaginaPainel() {
                   <tr>
                     <th>Status sistema</th>
                     <th className="hidden sm:table-cell">Status usuário</th>
+                    <th className="hidden lg:table-cell">Abastecimento</th>
                     <th className="text-right">Ordens</th>
                     <th className="hidden text-right md:table-cell">Itens</th>
                     <th className="text-right">Valor pendente</th>
@@ -217,6 +218,7 @@ export default async function PaginaPainel() {
                           {g.grupo}
                         </Link>
                       </td>
+                      <td className="hidden text-ink-2 lg:table-cell">{nomeCurto(resp.get(g.grupo)?.abastecimento) || <span className="text-muted">—</span>}</td>
                       <td className="num text-right font-medium">{numero(g.abertas)}</td>
                       <td className="num hidden text-right text-ink-2 md:table-cell">{numero(g.itens_abertos)}</td>
                       <td className="num text-right whitespace-nowrap">{moedaCurta(g.valor_aberto)}</td>

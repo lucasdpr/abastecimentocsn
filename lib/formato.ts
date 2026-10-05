@@ -43,3 +43,11 @@ export function pct(parte: unknown, total: unknown) {
   const t = Number(total ?? 0)
   return t ? Math.round((Number(parte ?? 0) / t) * 1000) / 10 : 0
 }
+
+/** "JOSE DA SILVA SANTOS" → "Jose Santos" (primeiro + último nome). */
+export function nomeCurto(nome: string | null | undefined) {
+  const p = (nome ?? '').trim().split(/\s+/).filter(Boolean)
+  if (!p.length) return ''
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+  return p.length === 1 ? cap(p[0]) : `${cap(p[0])} ${cap(p[p.length - 1])}`
+}

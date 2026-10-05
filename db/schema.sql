@@ -255,6 +255,24 @@ create index if not exists eventos_chave_idx on eventos (entidade, chave, criado
 alter table eventos add column if not exists importacao_id int references importacoes(id) on delete set null;
 create index if not exists eventos_importacao_idx on eventos (importacao_id, tipo);
 
+-- Responsáveis por grupo de planejamento (aba "Grupo de Planejamento" da planilha).
+create table if not exists grupos_planejamento (
+  gpm text primary key,
+  gerencia text,
+  equipamento text,
+  matricula_supervisor text,
+  supervisor text,
+  matricula_inspetor text,
+  inspetor text,
+  matricula_abastecimento text,
+  abastecimento text,
+  hash text not null,
+  primeira_vez_em timestamptz not null default now(),
+  ultima_mudanca_em timestamptz not null default now(),
+  ultima_importacao_id int,
+  removido_em timestamptz
+);
+
 -- Cadastro das ordens (exportação da IW38): uma linha por OM.
 create table if not exists ordens_sap (
   ordem text primary key,

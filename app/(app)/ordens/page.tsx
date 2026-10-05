@@ -4,8 +4,8 @@ import { SeloParada, SeloSituacao, StatusSap } from '@/components/selos'
 import { SeletorFiltro } from '@/components/seletor-filtro'
 import { Busca, Cabecalho, Filtros, Paginacao, Vazio } from '@/components/ui'
 import { exigirUsuario } from '@/lib/auth'
-import { gruposPlanejamento, listarOrdens } from '@/lib/consultas'
-import { data, moeda, numero } from '@/lib/formato'
+import { gruposPlanejamento, listarOrdens, responsaveisGrupos } from '@/lib/consultas'
+import { data, moeda, nomeCurto, numero } from '@/lib/formato'
 
 export const metadata = { title: 'Ordens' }
 
@@ -15,9 +15,10 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
   await exigirUsuario()
   const sp = await searchParams
   const pagina = Math.max(1, Number(sp.pagina) || 1)
-  const [{ linhas, total, porPagina, cfg }, grupos] = await Promise.all([
+  const [{ linhas, total, porPagina, cfg }, grupos, resp] = await Promise.all([
     listarOrdens({ busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo, pagina }),
     gruposPlanejamento(),
+    responsaveisGrupos(),
   ])
   const parametros = { busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo }
 
@@ -96,7 +97,10 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                       <Link href={`/ordens/${o.ordem}`} className="codigo font-medium text-accent hover:underline">
                         {o.ordem}
                       </Link>
-                      <div className="mt-0.5 text-xs text-muted">{o.grp_planejamento}</div>
+                      <div className="mt-0.5 text-xs whitespace-nowrap text-muted" title={resp.get(o.grp_planejamento ?? '')?.abastecimento ? `Abastecimento: ${resp.get(o.grp_planejamento ?? '')?.abastecimento}` : undefined}>
+                        {o.grp_planejamento}
+                        {resp.get(o.grp_planejamento ?? '')?.abastecimento && <> · {nomeCurto(resp.get(o.grp_planejamento ?? '')?.abastecimento)}</>}
+                      </div>
                     </td>
                     <td className="w-full max-w-0 min-w-40">
                       <div className="truncate" title={o.texto_ordem ?? undefined}>{o.texto_ordem ?? '—'}</div>

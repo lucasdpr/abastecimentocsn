@@ -3,8 +3,8 @@ import { ArrowRight, CalendarX, CircleCheckBig, FileClock, Hourglass, PackageX, 
 import { SeloSituacao, StatusSap } from '@/components/selos'
 import { Cabecalho, Kpi, Painel } from '@/components/ui'
 import { exigirUsuario, pode } from '@/lib/auth'
-import { alertas, prazoAntec, type OrdemResumo } from '@/lib/consultas'
-import { data, dataHora, dias, moedaCurta, numero } from '@/lib/formato'
+import { alertas, prazoAntec, responsaveisGrupos, type OrdemResumo, type ResponsavelGrupo } from '@/lib/consultas'
+import { data, dataHora, dias, moedaCurta, nomeCurto, numero } from '@/lib/formato'
 
 export const metadata = { title: 'Cobranças' }
 
@@ -26,7 +26,7 @@ function VerTodas({ href, total, destino }: { href: string; total: number; desti
   )
 }
 
-function TabelaOrdens({ ordens, detalhe, cabecalhoDetalhe }: { ordens: OrdemResumo[]; detalhe: (o: OrdemResumo) => React.ReactNode; cabecalhoDetalhe: string }) {
+function TabelaOrdens({ ordens, detalhe, cabecalhoDetalhe, resp }: { resp: Map<string, ResponsavelGrupo>; ordens: OrdemResumo[]; detalhe: (o: OrdemResumo) => React.ReactNode; cabecalhoDetalhe: string }) {
   return (
     <>
       {/* Mobile */}
@@ -64,7 +64,10 @@ function TabelaOrdens({ ordens, detalhe, cabecalhoDetalhe }: { ordens: OrdemResu
                   <Link href={`/ordens/${o.ordem}`} className="codigo font-medium text-accent hover:underline">
                     {o.ordem}
                   </Link>
-                  <div className="mt-0.5 text-xs text-muted">{o.grp_planejamento}</div>
+                  <div className="mt-0.5 text-xs text-muted">
+                    {o.grp_planejamento}
+                    {resp.get(o.grp_planejamento ?? '')?.abastecimento && <> · {nomeCurto(resp.get(o.grp_planejamento ?? '')?.abastecimento)}</>}
+                  </div>
                 </td>
                 <td className="w-full max-w-0 min-w-40">
                   <div className="truncate" title={o.texto_ordem ?? undefined}>{o.texto_ordem ?? '—'}</div>
@@ -93,7 +96,7 @@ function TabelaOrdens({ ordens, detalhe, cabecalhoDetalhe }: { ordens: OrdemResu
 
 export default async function PaginaAlertas() {
   await exigirUsuario(pode.verGestao)
-  const a = await alertas()
+  const [a, resp] = await Promise.all([alertas(), responsaveisGrupos()])
 
   const secoes = [
     { id: 'paradas', titulo: `Sem movimentação há ${a.cfg.diasSemMovimentacao}+ dias`, total: a.paradas.length, tom: 'critico' as const, icone: Hourglass },
@@ -156,6 +159,7 @@ export default async function PaginaAlertas() {
             descricao={`${numero(a.paradas.length)} ordens sem nenhuma mudança no SAP. Cobre o setor responsável — as mais antigas primeiro.`}
           >
             <TabelaOrdens
+              resp={resp}
               ordens={a.paradas}
               cabecalhoDetalhe="Parada há"
               detalhe={(o) => `${dias(o.dias_parada)}${o.cobrancas ? ` · ${o.cobrancas} cobrança(s)` : ''}`}
@@ -166,14 +170,14 @@ export default async function PaginaAlertas() {
 
         {a.recobrar.length > 0 && (
           <Painel id="recobrar" corpo="tabela" titulo="Cobradas sem resposta" descricao={`Cobradas há mais de ${a.cfg.diasRecobranca} dias e ainda abertas.`}>
-            <TabelaOrdens ordens={a.recobrar} cabecalhoDetalhe="Última cobrança" detalhe={(o) => dataHora(o.ultima_cobranca_em)} />
+            <TabelaOrdens resp={resp} ordens={a.recobrar} cabecalhoDetalhe="Última cobrança" detalhe={(o) => dataHora(o.ultima_cobranca_em)} />
             <VerTodas href="/ordens?filtro=cobradas" total={a.recobrar.length} destino="Ordens" />
           </Painel>
         )}
 
         {a.vencidas.length > 0 && (
           <Painel id="vencidas" corpo="tabela" titulo="Necessidade vencida há mais de 7 dias" descricao={`${numero(a.vencidas.length)} ordens com itens abertos e data de necessidade no passado.`}>
-            <TabelaOrdens ordens={a.vencidas} cabecalhoDetalhe="Necessidade" detalhe={(o) => data(o.necessidade_mais_antiga)} />
+            <TabelaOrdens resp={resp} ordens={a.vencidas} cabecalhoDetalhe="Necessidade" detalhe={(o) => data(o.necessidade_mais_antiga)} />
             <VerTodas href="/ordens?filtro=vencidas" total={a.vencidas.length} destino="Ordens" />
           </Painel>
         )}

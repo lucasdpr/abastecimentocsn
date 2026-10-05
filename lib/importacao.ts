@@ -24,6 +24,13 @@ const CAMPOS_HISTORICO: Partial<Record<BaseId, Record<string, string>>> = {
   fup: { status_sap: 'Status SAP', data_remessa_corrigida: 'Remessa corrigida' },
   ativacao: { status_po: 'Status do PO', data_remessa: 'Data remessa', faixa_atraso: 'Faixa de atraso' },
   reservas: { status_reserva: 'Status da reserva', registro_final: 'Registro final' },
+  grupos: {
+    gerencia: 'Gerência',
+    equipamento: 'Equipamento',
+    supervisor: 'Supervisor',
+    inspetor: 'Inspetor',
+    abastecimento: 'Abastecimento',
+  },
   iw38: {
     tipo: 'Tipo da ordem',
     prioridade: 'Prioridade',
@@ -48,10 +55,27 @@ const ENTIDADE_EVENTO: Record<BaseId, (r: Record<string, unknown>) => { entidade
   reservas: (r) => ({ entidade: 'reserva', chave: `${r.reserva}-${r.item}` }),
   // Mesmo histórico da tela da OM.
   iw38: (r) => ({ entidade: 'ordem', chave: String(r.ordem) }),
+  grupos: (r) => ({ entidade: 'grupo', chave: String(r.gpm) }),
 }
 
 /** Tabelas criadas pelo próprio app na primeira importação (sem precisar rodar a migração à mão). Mesmo DDL de db/schema.sql. */
 const TABELAS_AUTOMATICAS: Partial<Record<BaseId, string>> = {
+  grupos: `create table if not exists grupos_planejamento (
+  gpm text primary key,
+  gerencia text,
+  equipamento text,
+  matricula_supervisor text,
+  supervisor text,
+  matricula_inspetor text,
+  inspetor text,
+  matricula_abastecimento text,
+  abastecimento text,
+  hash text not null,
+  primeira_vez_em timestamptz not null default now(),
+  ultima_mudanca_em timestamptz not null default now(),
+  ultima_importacao_id int,
+  removido_em timestamptz
+)`,
   iw38: `create table if not exists ordens_sap (
   ordem text primary key,
   tipo text,
@@ -302,6 +326,7 @@ function prefixo(base: BaseId, r: Record<string, unknown>) {
   if (base === 'fup') return `PO ${r.po}/${r.item_po}: `
   if (base === 'ativacao') return `PO ${r.po}/${r.item_po}: `
   if (base === 'iw38') return 'Dados da ordem (IW38): '
+  if (base === 'grupos') return 'Responsáveis do grupo: '
   return ''
 }
 
@@ -310,6 +335,7 @@ function descreverNovo(base: BaseId, r: Record<string, unknown>) {
   if (base === 'fup') return `PO ${r.po}/${r.item_po} entrou no follow-up`
   if (base === 'ativacao') return `PO ${r.po}/${r.item_po} entrou na ativação`
   if (base === 'iw38') return `OM ${r.ordem} entrou na IW38${r.tipo ? ` (${r.tipo})` : ''}: ${r.texto ?? ''}`
+  if (base === 'grupos') return `Grupo ${r.gpm} entrou na lista de responsáveis`
   return 'Novo registro'
 }
 
@@ -333,7 +359,7 @@ export async function concluirImportacao(importacaoId: number, carteiraCompleta:
         ...ENTIDADE_EVENTO[base.id](r),
         tipo: 'removido',
         descricao:
-          base.id === 'ordens' ? `Item ${r.reserva}/${r.item} saiu do relatório do SAP` : base.id === 'iw38' ? 'OM saiu da IW38' : 'Saiu do relatório do SAP',
+          base.id === 'ordens' ? `Item ${r.reserva}/${r.item} saiu do relatório do SAP` : base.id === 'iw38' ? 'OM saiu da IW38' : base.id === 'grupos' ? 'Grupo saiu da lista de responsáveis' : 'Saiu do relatório do SAP',
       }))
       await query(
         `insert into eventos (entidade, chave, tipo, descricao, importacao_id)

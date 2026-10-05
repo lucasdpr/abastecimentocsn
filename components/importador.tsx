@@ -93,7 +93,7 @@ export function Importador() {
       <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line bg-surface px-4 py-10 text-center transition-colors hover:border-accent">
         {lendo ? <LoaderCircle className="size-7 animate-spin text-accent" /> : <Upload className="size-7 text-muted" />}
         <span className="text-sm font-medium">{lendo ? `Lendo ${arquivo}…` : 'Selecionar planilha (.xlsx, .xltx)'}</span>
-        <span className="text-xs text-muted">Ordens, IW38, Follow-up (FUP), Ativação ou Reservas. O tipo é detectado pelo cabeçalho.</span>
+        <span className="text-xs text-muted">Ordens, IW38, Grupos de planejamento, Follow-up (FUP), Ativação ou Reservas. O tipo é detectado pelo cabeçalho.</span>
         <input
           type="file"
           accept=".xlsx,.xltx,.xlsm"

@@ -641,3 +641,21 @@ export async function statusAtualizacao() {
     return { ...l, diasUteis, atrasada: diasUteis > 1 }
   })
 }
+
+export type ResponsavelGrupo = {
+  gpm: string
+  gerencia: string | null
+  equipamento: string | null
+  supervisor: string | null
+  inspetor: string | null
+  abastecimento: string | null
+  matricula_supervisor: string | null
+  matricula_inspetor: string | null
+  matricula_abastecimento: string | null
+}
+
+/** Responsáveis por grupo de planejamento (GPM). Vazio se a base ainda não foi importada. */
+export async function responsaveisGrupos() {
+  const linhas = await query<ResponsavelGrupo>(`select * from grupos_planejamento where removido_em is null order by gpm`).catch(() => [])
+  return new Map(linhas.map((l) => [l.gpm, l]))
+}
