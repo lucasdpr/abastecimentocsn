@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs'
 import { revalidatePath } from 'next/cache'
 import { BASES } from '@/lib/bases'
-import { queryOne } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { concluirImportacao, importarLote, iniciarImportacao } from '@/lib/importacao'
 import { lerAbas } from '@/lib/planilha'
 import { PREFIXO_ROBO, roboAutorizado, semAcento, tokenRobo } from '@/lib/robo'
@@ -20,6 +20,8 @@ function texto(status: number, linhas: string[]) {
  * Recebe a planilha exportada do SAP pelo robô (multipart, campo "arquivo") e importa como a tela Importar.
  * Autenticação: cabeçalho "Authorization: Bearer <ROBO_TOKEN>".
  * Campos opcionais: parcial=1 (não marca como "saiu" o que faltar), forcar=1 (ignora a trava de tamanho).
+ * Planilha maior que o limite da Vercel (~4,5 MB por envio): o robô manda em partes com
+ * envio=<id>, parte=<1..N>, total=<N>; as partes ficam no banco e a última dispara a importação.
  */
 export async function POST(request: Request) {
   if (!tokenRobo()) return texto(503, ['ERRO: robo desligado. Configure ROBO_TOKEN (24+ caracteres) na Vercel.'])
@@ -36,10 +38,37 @@ export async function POST(request: Request) {
   const parcial = form.get('parcial') === '1'
   const forcar = form.get('forcar') === '1'
 
+  let conteudo: Buffer = Buffer.from(await arquivo.arrayBuffer())
+  const envio = String(form.get('envio') ?? '').replace(/[^\w-]/g, '').slice(0, 64)
+  const total = Number(form.get('total') ?? 1)
+  if (envio && total > 1) {
+    const parte = Number(form.get('parte'))
+    if (!Number.isInteger(parte) || !Number.isInteger(total) || parte < 1 || parte > total || total > 20) {
+      return texto(400, ['ERRO: parte/total invalidos.'])
+    }
+    await query(
+      `create table if not exists robo_partes (envio text not null, parte int not null, dados bytea not null,
+         criado_em timestamptz not null default now(), primary key (envio, parte))`,
+    )
+    await query(`delete from robo_partes where criado_em < now() - interval '1 day'`)
+    await query(
+      `insert into robo_partes (envio, parte, dados) values ($1, $2, $3)
+         on conflict (envio, parte) do update set dados = excluded.dados, criado_em = now()`,
+      [envio, parte, conteudo],
+    )
+    const partes = await query<{ parte: number; dados: Buffer }>(
+      'select parte, dados from robo_partes where envio = $1 order by parte',
+      [envio],
+    )
+    if (partes.length < total) return texto(202, [`PARTE ${parte}/${total} recebida`])
+    conteudo = Buffer.concat(partes.map((p) => p.dados))
+    await query('delete from robo_partes where envio = $1', [envio])
+  }
+
   let abas
   try {
     const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(await arquivo.arrayBuffer())
+    await wb.xlsx.load(conteudo as unknown as ArrayBuffer)
     abas = lerAbas(wb)
   } catch {
     return texto(400, [`ERRO: nao consegui ler ${arquivo.name}. Confira se e .xlsx.`])
