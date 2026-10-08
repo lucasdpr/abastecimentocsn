@@ -343,3 +343,22 @@ group by i.ordem;
 create materialized view if not exists ordens_resumo as select * from ordens;
 -- O índice único permite "refresh materialized view concurrently" (sem bloquear leituras).
 create unique index if not exists ordens_resumo_ordem_idx on ordens_resumo (ordem);
+
+-- Relatório ZMR37 (consolidado por material/centro): MRP e estoque. O app também cria sozinho na 1ª importação.
+create table if not exists materiais_sap (
+  material text primary key,
+  descricao text,
+  centro text,
+  planejador_mrp text,
+  tipo_mrp text,
+  estoque_livre numeric,
+  estoque_seguranca numeric,
+  unidade text,
+  abc text,
+  preco_medio numeric,
+  hash text not null,
+  primeira_vez_em timestamptz not null default now(),
+  ultima_mudanca_em timestamptz not null default now(),
+  ultima_importacao_id int,
+  removido_em timestamptz
+);

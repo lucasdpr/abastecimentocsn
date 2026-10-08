@@ -9,7 +9,7 @@ import { data, dataHora, moeda, moedaCurta, nomeCurto, numero, pct } from '@/lib
 
 export const metadata = { title: 'Painel' }
 
-const NOME_BASE: Record<string, string> = { ordens: 'Ordens', iw38: 'IW38', grupos: 'Grupos', fup: 'Follow-up', ativacao: 'Ativação', reservas: 'Reservas' }
+const NOME_BASE: Record<string, string> = { ordens: 'Ordens', iw38: 'IW38', grupos: 'Grupos', materiais: 'Materiais', fup: 'Follow-up', ativacao: 'Ativação', reservas: 'Reservas' }
 
 // Status de sistema padrão do SAP PM. Os de usuário são do perfil da CSN e aparecem só como código.
 const FASE_SISTEMA: Record<string, string> = { ABER: 'Aberta', LIB: 'Liberada', ENTE: 'Encerrada tecnicamente', ENCE: 'Encerrada' }

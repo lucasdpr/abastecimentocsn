@@ -21,6 +21,10 @@ export function colunasExportacao(baseId: BaseId): Coluna[] {
       { titulo: 'APP Cobranças', campo: 'app_cobrancas', tipo: 'numero' },
       { titulo: 'APP Última cobrança', campo: 'app_ultima_cobranca', tipo: 'datahora' },
       { titulo: 'APP Dias sem mudança', campo: 'app_dias_parada', tipo: 'numero' },
+      // Do relatório ZMR37 (base Materiais), pelo código do material.
+      { titulo: 'MRP', campo: 'app_mrp' },
+      { titulo: 'Tipo MRP', campo: 'app_tipo_mrp' },
+      { titulo: 'Estoque livre', campo: 'app_estoque_livre', tipo: 'numero' },
     ],
     fup: [
       { titulo: 'APP Prazo', campo: 'app_prazo' },
@@ -31,6 +35,7 @@ export function colunasExportacao(baseId: BaseId): Coluna[] {
     reservas: [],
     iw38: [],
     grupos: [],
+    materiais: [],
   }
   return [...originais, ...extras[baseId]]
 }
@@ -41,11 +46,24 @@ export async function dadosExportacao(baseId: BaseId) {
       return query(
         `select i.*, a.situacao as app_situacao, a.setor_responsavel as app_setor, a.observacao as app_observacao,
                 a.cobrancas as app_cobrancas, a.ultima_cobranca_em as app_ultima_cobranca,
-                (current_date - o.ultima_mudanca_em::date) as app_dias_parada
+                (current_date - o.ultima_mudanca_em::date) as app_dias_parada,
+                m.planejador_mrp as app_mrp, m.tipo_mrp as app_tipo_mrp, m.estoque_livre as app_estoque_livre
            from ordem_itens i
            join ordens_resumo o on o.ordem = i.ordem
            left join ordem_acompanhamento a on a.ordem = i.ordem
+           left join materiais_sap m on m.material = i.material and m.removido_em is null
           where i.removido_em is null order by i.ordem, i.reserva, i.item`,
+      ).catch(() =>
+        // Antes da primeira importação da ZMR37 a tabela materiais_sap ainda não existe.
+        query(
+          `select i.*, a.situacao as app_situacao, a.setor_responsavel as app_setor, a.observacao as app_observacao,
+                  a.cobrancas as app_cobrancas, a.ultima_cobranca_em as app_ultima_cobranca,
+                  (current_date - o.ultima_mudanca_em::date) as app_dias_parada
+             from ordem_itens i
+             join ordens_resumo o on o.ordem = i.ordem
+             left join ordem_acompanhamento a on a.ordem = i.ordem
+            where i.removido_em is null order by i.ordem, i.reserva, i.item`,
+        ),
       )
     case 'fup':
       return query(`select f.*, ${FUP_PRAZO_SQL} as app_prazo from fup f where f.removido_em is null order by f.po, f.item_po`)
@@ -55,6 +73,8 @@ export async function dadosExportacao(baseId: BaseId) {
       return query('select * from reservas where removido_em is null order by reserva, item')
     case 'grupos':
       return query('select * from grupos_planejamento where removido_em is null order by gpm').catch(() => [])
+    case 'materiais':
+      return query('select * from materiais_sap where removido_em is null order by material').catch(() => [])
     case 'iw38':
       return query("select * from ordens_sap where removido_em is null order by ordem").catch(() => [])
   }

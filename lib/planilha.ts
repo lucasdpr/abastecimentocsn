@@ -42,3 +42,32 @@ export function lerAbas(wb: Workbook): AbaLida[] {
   })
   return encontradas
 }
+
+/** É um .xlsx (zip)? Os relatórios salvos pelo SAP em "arquivo local" são texto com tabulação. */
+export function ehXlsx(conteudo: Uint8Array) {
+  return conteudo.length > 3 && conteudo[0] === 0x50 && conteudo[1] === 0x4b
+}
+
+/**
+ * Converte o texto com tabulação do SAP (Lista › Salvar › Arquivo local) numa planilha do ExcelJS.
+ * Ignora o título do relatório: fica só das linhas com várias colunas em diante (cabeçalho + dados).
+ */
+export function planilhaDeTexto(wb: Workbook, conteudo: Uint8Array) {
+  // O SAP grava em ANSI (ISO-8859-1); se vier em UTF-8 válido, usa UTF-8.
+  let texto: string
+  try {
+    texto = new TextDecoder('utf-8', { fatal: true }).decode(conteudo)
+  } catch {
+    texto = new TextDecoder('latin1').decode(conteudo)
+  }
+  const ws = wb.addWorksheet('Relatorio SAP')
+  let comecou = false
+  for (const linha of texto.split(/\r?\n/)) {
+    const colunas = linha.split('\t')
+    if (!comecou && colunas.length < 4) continue
+    comecou = true
+    if (colunas.every((c) => !c.trim())) continue
+    ws.addRow(colunas.map((c) => c.trim()))
+  }
+  return wb
+}

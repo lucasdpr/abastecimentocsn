@@ -5,6 +5,8 @@
 '  3) Salva a ZPMX0018 em Desktop\robo ordens
 '  4) Envia para o app (base Ordens - itens de reserva), que atualiza
 '     e registra "O que mudou"
+'  5) Le os materiais (sem repetir, sem zeros na frente), cola na ZMR37
+'     e envia o MRP e o estoque de cada material (base Materiais)
 '
 '  SAP precisa estar ABERTO e LOGADO. Uso: dois cliques.
 '  Para rodar sem janelas (Agendador do Windows):
@@ -33,6 +35,10 @@ Const ZPM_CENTRO = "01"
 Const ZPM_DE = "13.09.2021"
 Const ZPM_ATE = "31.12.2029"
 Const ZPM_LAYOUT = "/FIALHO"
+
+' ZMR37 (gravacao zmr37): MRP e estoque por material
+Const ZMR_CENTRO = "01"
+Const ZMR_ARQUIVO = "MRP.txt"
 
 Dim fso, sh, silencioso, historico, desktop, pastaIw38, pastaOrdens
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -85,7 +91,7 @@ session.findById("wnd[0]/tbar[1]/btn[8]").press
 If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_1").press
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 
-LimparPlanilhas pastaIw38
+LimparPlanilhas pastaIw38, "xlsx"
 inicioEtapa = Now
 Dim grid
 Set grid = session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell")
@@ -96,12 +102,12 @@ grid.selectContextMenuItem "&XXL"
 SalvarComo pastaIw38, "IW38.xlsx"
 If Err.Number <> 0 Then Falhar "Falha ao exportar a IW38: " & Err.Description
 On Error GoTo 0
-planilhaIw38 = EsperarPlanilha(pastaIw38, inicioEtapa)
+planilhaIw38 = EsperarPlanilha(pastaIw38, inicioEtapa, "xlsx")
 Registrar "IW38 exportada (" & Round(fso.GetFile(planilhaIw38).Size / 1024) & " KB)"
 
 ' ---------- 3. Le as ordens da IW38 e copia para a area de transferencia ----------
 Dim ordens, qtdOrdens
-ordens = LerOrdens(planilhaIw38, qtdOrdens)
+ordens = LerColuna(planilhaIw38, "Ordem", False, qtdOrdens)
 If qtdOrdens = 0 Then Falhar "A planilha da IW38 nao tem nenhuma ordem (coluna 'Ordem')."
 CopiarTexto ordens
 Registrar qtdOrdens & " ordens copiadas da IW38"
@@ -125,7 +131,7 @@ session.findById("wnd[0]/tbar[1]/btn[8]").press
 If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_1").press
 If Not Existe("wnd[0]/usr/cntlCC_ALV/shellcont/shell") Then Falhar "A ZPMX0018 nao retornou a lista (nenhum item ou tela diferente da esperada)."
 
-LimparPlanilhas pastaOrdens
+LimparPlanilhas pastaOrdens, "xlsx"
 inicioEtapa = Now
 Set grid = session.findById("wnd[0]/usr/cntlCC_ALV/shellcont/shell")
 grid.pressToolbarContextButton "&MB_EXPORT"
@@ -134,7 +140,7 @@ SalvarComo pastaOrdens, "ORDENS.xlsx"
 If Err.Number <> 0 Then Falhar "Falha ao exportar a ZPMX0018: " & Err.Description
 On Error GoTo 0
 Dim planilhaOrdens
-planilhaOrdens = EsperarPlanilha(pastaOrdens, inicioEtapa)
+planilhaOrdens = EsperarPlanilha(pastaOrdens, inicioEtapa, "xlsx")
 Registrar "ZPMX0018 exportada (" & Round(fso.GetFile(planilhaOrdens).Size / 1024) & " KB)"
 
 On Error Resume Next
@@ -142,11 +148,54 @@ session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
 session.findById("wnd[0]").sendVKey 0
 On Error GoTo 0
 
-' ---------- 5. Envia para o app ----------
+' ---------- 5. Envia as ordens para o app ----------
 Dim resultado
-resultado = EnviarPlanilha(planilhaOrdens)
+resultado = EnviarPlanilha(planilhaOrdens, "ORDENS.xlsx")
 Registrar resultado
-If Not silencioso Then MsgBox "Pronto. O app foi atualizado:" & vbCrLf & vbCrLf & resultado, vbInformation, "Robo ORDENS"
+
+' ---------- 6. ZMR37: MRP e estoque dos materiais das reservas ----------
+Dim materiais, qtdMateriais, arquivoMrp, resultadoMrp
+materiais = LerColuna(planilhaOrdens, "Material", True, qtdMateriais)
+If qtdMateriais = 0 Then Falhar "A planilha da ZPMX0018 nao tem nenhum material (coluna 'Material')."
+CopiarTexto materiais
+Registrar qtdMateriais & " materiais copiados da ZPMX0018"
+
+On Error Resume Next
+session.findById("wnd[0]/tbar[0]/okcd").text = "/nZMR37"
+session.findById("wnd[0]").sendVKey 0
+session.findById("wnd[0]/usr/ctxtV_CENTRO-LOW").text = ZMR_CENTRO
+session.findById("wnd[0]/usr/btn%_V_MATER_%_APP_%-VALU_PUSH").press
+' Carregar da area de transferencia (Shift+F12) e confirmar (F8)
+session.findById("wnd[1]/tbar[0]/btn[24]").press
+session.findById("wnd[1]/tbar[0]/btn[8]").press
+session.findById("wnd[0]/usr/chkP_CONSO").selected = True
+If Err.Number <> 0 Then Falhar "Falha ao preencher a tela da ZMR37: " & Err.Description
+Err.Clear
+session.findById("wnd[0]/tbar[1]/btn[8]").press
+If Existe("wnd[1]/usr/btnBUTTON_1") Then session.findById("wnd[1]/usr/btnBUTTON_1").press
+
+' Salvar lista em arquivo local, texto com tabulacao (igual a gravacao)
+LimparPlanilhas pastaOrdens, "txt"
+inicioEtapa = Now
+session.findById("wnd[0]/tbar[1]/btn[45]").press
+session.findById("wnd[1]/usr/subSUBSCREEN_STEPLOOP:SAPLSPO5:0150/sub:SAPLSPO5:0150/radSPOPLI-SELFLAG[1,0]").select
+session.findById("wnd[1]/tbar[0]/btn[0]").press
+session.findById("wnd[1]/usr/ctxtDY_PATH").text = pastaOrdens
+session.findById("wnd[1]/usr/ctxtDY_FILENAME").text = ZMR_ARQUIVO
+session.findById("wnd[1]/tbar[0]/btn[0]").press
+If Err.Number <> 0 Then Falhar "Falha ao salvar a ZMR37: " & Err.Description
+On Error GoTo 0
+arquivoMrp = EsperarPlanilha(pastaOrdens, inicioEtapa, "txt")
+Registrar "ZMR37 salva (" & Round(fso.GetFile(arquivoMrp).Size / 1024) & " KB)"
+
+On Error Resume Next
+session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
+session.findById("wnd[0]").sendVKey 0
+On Error GoTo 0
+
+resultadoMrp = EnviarPlanilha(arquivoMrp, "MRP.txt")
+Registrar resultadoMrp
+If Not silencioso Then MsgBox "Pronto. O app foi atualizado:" & vbCrLf & vbCrLf & resultado & vbCrLf & resultadoMrp, vbInformation, "Robo ORDENS"
 
 
 ' =====================================================================
@@ -170,11 +219,12 @@ Function Existe(id)
 End Function
 
 ' Apaga as planilhas antigas da pasta para nao confundir com a nova.
-Sub LimparPlanilhas(pasta)
+Sub LimparPlanilhas(pasta, extensao)
   Dim arq
   On Error Resume Next
   For Each arq In fso.GetFolder(pasta).Files
-    If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" Then fso.DeleteFile arq.Path, True
+    ' Nunca apaga o historico do robo.
+    If LCase(fso.GetExtensionName(arq.Name)) = extensao And LCase(arq.Name) <> "historico.txt" Then fso.DeleteFile arq.Path, True
   Next
   Err.Clear
 End Sub
@@ -196,7 +246,7 @@ End Sub
 
 ' Espera ate 10 minutos a planilha nova (criada depois de "desde") ficar completa.
 ' Na 1a vez o SAP pergunta "Permitir o acesso a esse file?": clicar Permitir e marcar "Memorizar minha decisao".
-Function EsperarPlanilha(pasta, desde)
+Function EsperarPlanilha(pasta, desde, extensao)
   Dim espera, arq, caminho, tamanho, anterior, limite
   limite = DateAdd("s", -5, desde)
   anterior = -1
@@ -204,7 +254,7 @@ Function EsperarPlanilha(pasta, desde)
     ' Ignora o arquivo temporario do Excel (~$...) e planilhas antigas; pega a maior.
     caminho = ""
     For Each arq In fso.GetFolder(pasta).Files
-      If LCase(fso.GetExtensionName(arq.Name)) = "xlsx" And Left(arq.Name, 2) <> "~$" And arq.DateLastModified >= limite Then
+      If LCase(fso.GetExtensionName(arq.Name)) = extensao And Left(arq.Name, 2) <> "~$" And LCase(arq.Name) <> "historico.txt" And arq.DateLastModified >= limite Then
         If caminho = "" Then
           caminho = arq.Path
         ElseIf arq.Size > fso.GetFile(caminho).Size Then
@@ -225,28 +275,29 @@ Function EsperarPlanilha(pasta, desde)
   EsperarPlanilha = caminho
 End Function
 
-' Le a coluna "Ordem" da planilha (pelo Excel, numa copia) e devolve uma ordem por linha, sem repetir.
-Function LerOrdens(caminho, ByRef qtd)
+' Le uma coluna da planilha (pelo Excel, numa copia) e devolve um valor por linha, sem repetir.
+' tirarZeros: "000000000001103950" vira "1103950" (o SAP pesquisa material assim).
+Function LerColuna(caminho, titulo, tirarZeros, ByRef qtd)
   Dim copia, xl, wb, ws, c, col, ultima, valores, r, v, vistos
   qtd = 0
-  LerOrdens = ""
-  copia = sh.ExpandEnvironmentStrings("%TEMP%") & "\robo-iw38-leitura.xlsx"
+  LerColuna = ""
+  copia = sh.ExpandEnvironmentStrings("%TEMP%") & "\robo-leitura.xlsx"
   On Error Resume Next
   fso.CopyFile caminho, copia, True
-  If Err.Number <> 0 Then Falhar "Nao consegui copiar a planilha da IW38: " & Err.Description
+  If Err.Number <> 0 Then Falhar "Nao consegui copiar a planilha " & caminho & ": " & Err.Description
   Set xl = CreateObject("Excel.Application")
-  If Err.Number <> 0 Then Falhar "Nao consegui abrir o Excel para ler a IW38: " & Err.Description
+  If Err.Number <> 0 Then Falhar "Nao consegui abrir o Excel para ler " & caminho & ": " & Err.Description
   xl.Visible = False
   xl.DisplayAlerts = False
   Set wb = xl.Workbooks.Open(copia, 0, True)
   If Err.Number <> 0 Then
     xl.Quit
-    Falhar "O Excel nao abriu a planilha da IW38: " & Err.Description
+    Falhar "O Excel nao abriu " & caminho & ": " & Err.Description
   End If
   Set ws = wb.Worksheets(1)
   col = 0
   For c = 1 To ws.UsedRange.Columns.Count
-    If Trim(CStr(ws.Cells(1, c).Value)) = "Ordem" Then
+    If Trim(CStr(ws.Cells(1, c).Value)) = titulo Then
       col = c
       Exit For
     End If
@@ -258,11 +309,11 @@ Function LerOrdens(caminho, ByRef qtd)
       valores = ws.Range(ws.Cells(2, col), ws.Cells(ultima, col)).Value
       If IsArray(valores) Then
         For r = 1 To UBound(valores, 1)
-          v = Trim(CStr(valores(r, 1)))
+          v = Limpar(valores(r, 1), tirarZeros)
           If v <> "" And Not vistos.Exists(v) Then vistos.Add v, True
         Next
       Else
-        v = Trim(CStr(valores))
+        v = Limpar(valores, tirarZeros)
         If v <> "" Then vistos.Add v, True
       End If
     End If
@@ -273,9 +324,20 @@ Function LerOrdens(caminho, ByRef qtd)
   fso.DeleteFile copia, True
   Err.Clear
   On Error GoTo 0
-  If col = 0 Then Falhar "Nao achei a coluna 'Ordem' na planilha da IW38."
+  If col = 0 Then Falhar "Nao achei a coluna '" & titulo & "' em " & caminho
   qtd = vistos.Count
-  If qtd > 0 Then LerOrdens = Join(vistos.Keys, vbCrLf)
+  If qtd > 0 Then LerColuna = Join(vistos.Keys, vbCrLf)
+End Function
+
+Function Limpar(valor, tirarZeros)
+  Dim v
+  v = Trim(CStr(valor))
+  If tirarZeros Then
+    Do While Len(v) > 1 And Left(v, 1) = "0"
+      v = Mid(v, 2)
+    Loop
+  End If
+  Limpar = v
 End Function
 
 ' Coloca o texto na area de transferencia do Windows (clip.exe).
@@ -290,7 +352,7 @@ End Sub
 
 ' Envia a planilha em partes de ate PARTE_BYTES (o app junta e importa na ultima).
 ' Usa a conexao do Windows (mesma do navegador e do proxy da empresa).
-Function EnviarPlanilha(caminho)
+Function EnviarPlanilha(caminho, nome)
   Dim copia, todo, total, envio, parte, bytes, status, texto, erro
   copia = sh.ExpandEnvironmentStrings("%TEMP%") & "\robo-envio.tmp"
   On Error Resume Next
@@ -309,7 +371,7 @@ Function EnviarPlanilha(caminho)
   For parte = 1 To total
     todo.Position = (parte - 1) * PARTE_BYTES
     bytes = todo.Read(PARTE_BYTES)
-    EnviarParte bytes, envio, parte, total, status, texto, erro
+    EnviarParte bytes, envio, parte, total, nome, status, texto, erro
     If parte < total Then
       If status <> 202 Then Falhar "O envio para o app falhou (parte " & parte & " de " & total & ")." & vbCrLf & vbCrLf & erro & vbCrLf & texto
     ElseIf status <> 200 Then
@@ -322,7 +384,7 @@ Function EnviarPlanilha(caminho)
   EnviarPlanilha = texto
 End Function
 
-Sub EnviarParte(bytes, envio, parte, total, ByRef status, ByRef texto, ByRef erro)
+Sub EnviarParte(bytes, envio, parte, total, nome, ByRef status, ByRef texto, ByRef erro)
   Dim limite, corpo, http
   status = 0 : texto = "" : erro = ""
   On Error Resume Next
@@ -332,7 +394,7 @@ Sub EnviarParte(bytes, envio, parte, total, ByRef status, ByRef texto, ByRef err
   corpo.Open
   EscreverTexto corpo, Campo(limite, "envio", envio) & Campo(limite, "parte", parte) & Campo(limite, "total", total) & _
     "--" & limite & vbCrLf & _
-    "Content-Disposition: form-data; name=""arquivo""; filename=""ORDENS.xlsx""" & vbCrLf & _
+    "Content-Disposition: form-data; name=""arquivo""; filename=""" & nome & """" & vbCrLf & _
     "Content-Type: application/octet-stream" & vbCrLf & vbCrLf
   corpo.Write bytes
   EscreverTexto corpo, vbCrLf & "--" & limite & "--" & vbCrLf

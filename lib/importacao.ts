@@ -31,6 +31,7 @@ const CAMPOS_HISTORICO: Partial<Record<BaseId, Record<string, string>>> = {
     inspetor: 'Inspetor',
     abastecimento: 'Abastecimento',
   },
+  materiais: { planejador_mrp: 'Planejador MRP', tipo_mrp: 'Tipo de MRP' },
   iw38: {
     tipo: 'Tipo da ordem',
     prioridade: 'Prioridade',
@@ -56,10 +57,28 @@ const ENTIDADE_EVENTO: Record<BaseId, (r: Record<string, unknown>) => { entidade
   // Mesmo histórico da tela da OM.
   iw38: (r) => ({ entidade: 'ordem', chave: String(r.ordem) }),
   grupos: (r) => ({ entidade: 'grupo', chave: String(r.gpm) }),
+  materiais: (r) => ({ entidade: 'material', chave: String(r.material) }),
 }
 
 /** Tabelas criadas pelo próprio app na primeira importação (sem precisar rodar a migração à mão). Mesmo DDL de db/schema.sql. */
 const TABELAS_AUTOMATICAS: Partial<Record<BaseId, string>> = {
+  materiais: `create table if not exists materiais_sap (
+  material text primary key,
+  descricao text,
+  centro text,
+  planejador_mrp text,
+  tipo_mrp text,
+  estoque_livre numeric,
+  estoque_seguranca numeric,
+  unidade text,
+  abc text,
+  preco_medio numeric,
+  hash text not null,
+  primeira_vez_em timestamptz not null default now(),
+  ultima_mudanca_em timestamptz not null default now(),
+  ultima_importacao_id int,
+  removido_em timestamptz
+)`,
   grupos: `create table if not exists grupos_planejamento (
   gpm text primary key,
   gerencia text,
@@ -327,6 +346,7 @@ function prefixo(base: BaseId, r: Record<string, unknown>) {
   if (base === 'ativacao') return `PO ${r.po}/${r.item_po}: `
   if (base === 'iw38') return 'Dados da ordem (IW38): '
   if (base === 'grupos') return 'Responsáveis do grupo: '
+  if (base === 'materiais') return `Material ${r.material}: `
   return ''
 }
 
@@ -336,6 +356,7 @@ function descreverNovo(base: BaseId, r: Record<string, unknown>) {
   if (base === 'ativacao') return `PO ${r.po}/${r.item_po} entrou na ativação`
   if (base === 'iw38') return `OM ${r.ordem} entrou na IW38${r.tipo ? ` (${r.tipo})` : ''}: ${r.texto ?? ''}`
   if (base === 'grupos') return `Grupo ${r.gpm} entrou na lista de responsáveis`
+  if (base === 'materiais') return `Material ${r.material} entrou (MRP ${r.planejador_mrp ?? '—'})`
   return 'Novo registro'
 }
 
