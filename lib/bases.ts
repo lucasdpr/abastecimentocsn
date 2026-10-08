@@ -16,7 +16,7 @@ export type Campo = {
   app?: boolean
 }
 
-export type BaseId = 'ordens' | 'fup' | 'ativacao' | 'reservas' | 'iw38' | 'grupos'
+export type BaseId = 'ordens' | 'fup' | 'ativacao' | 'reservas' | 'iw38' | 'grupos' | 'materiais'
 
 export type Base = {
   id: BaseId
@@ -212,6 +212,26 @@ export const BASES: Record<BaseId, Base> = {
       c('abastecimento', 'texto', 'Abastecimento'),
     ],
   },
+  materiais: {
+    id: 'materiais',
+    nome: 'Materiais (ZMR37)',
+    descricao: 'Relatório ZMR37 consolidado por material/centro: MRP e estoque de cada material das reservas.',
+    tabela: 'materiais_sap',
+    chave: ['material'],
+    assinatura: ['Material', 'PlMRP', 'TpM'],
+    campos: [
+      c('material', 'codigo', 'Material'),
+      c('descricao', 'texto', 'Texto breve material'),
+      c('centro', 'texto', 'Cen.', 'Centro'),
+      c('planejador_mrp', 'texto', 'PlMRP', 'Planejador MRP'),
+      c('tipo_mrp', 'texto', 'TpM', 'Tipo de MRP'),
+      c('estoque_livre', 'numero', 'Utiliz.livre', 'Estoque livre'),
+      c('estoque_seguranca', 'numero', 'Estq.seg.', 'Estoque de segurança'),
+      c('unidade', 'texto', 'UMB'),
+      c('abc', 'texto', 'ABC'),
+      c('preco_medio', 'numero', 'PMM'),
+    ],
+  },
   reservas: {
     id: 'reservas',
     nome: 'Reservas',
@@ -291,7 +311,9 @@ function dataIso(valor: unknown): string | null {
 function numero(valor: unknown): number | null {
   if (valor == null || valor === '') return null
   if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null
-  const texto = String(valor).trim().replace(/\s/g, '')
+  let texto = String(valor).trim().replace(/\s/g, '')
+  // SAP escreve negativo com o sinal no fim ("1,000-").
+  if (/^[\d.,]+-$/.test(texto)) texto = '-' + texto.slice(0, -1)
   const normalizado = /,\d{1,}$/.test(texto) ? texto.replace(/\./g, '').replace(',', '.') : texto
   const n = Number(normalizado)
   return Number.isFinite(n) ? n : null

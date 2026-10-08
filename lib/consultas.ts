@@ -234,7 +234,7 @@ export type OrdemSap = {
 
 export async function detalheOrdem(ordem: string) {
   const resumo = await queryOne<OrdemResumo>(`${ORDEM_SELECT} where o.ordem = $1`, [ordem])
-  const [itens, pedidos, eventos, antecs, sap] = await Promise.all([
+  const [itens, pedidos, eventos, antecs, sap, materiais] = await Promise.all([
     query(
       `select reserva, item, material, descricao, qtd, unidade, qtd_retirada, data_necessidade, status_item,
               status_aprovacao, eliminado, preco_medio, removido_em
@@ -257,8 +257,14 @@ export async function detalheOrdem(ordem: string) {
       'select s.* from ordens_sap s where s.ordem = $1',
       [ordem],
     ).catch(() => null),
+    // MRP e estoque de cada material (ZMR37); a tabela só existe depois da primeira importação.
+    query<{ material: string; planejador_mrp: string | null; tipo_mrp: string | null; estoque_livre: string | null }>(
+      `select material, planejador_mrp, tipo_mrp, estoque_livre from materiais_sap
+        where removido_em is null and material in (select material from ordem_itens where ordem = $1)`,
+      [ordem],
+    ).catch(() => []),
   ])
-  return { resumo, itens, pedidos, eventos, antecs, sap }
+  return { resumo, itens, pedidos, eventos, antecs, sap, materiais: new Map(materiais.map((m) => [m.material, m])) }
 }
 
 type FiltroFup = {

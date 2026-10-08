@@ -45,6 +45,7 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
   if (!d.resumo) return <SomenteSap sap={d.sap!} eventos={d.eventos} grupo={resp.get(d.sap!.grp_planejamento ?? '')} />
   const o = d.resumo
   const itens = d.itens as Item[]
+  const mat = (material: string | null) => (material ? d.materiais.get(material) : undefined)
 
   return (
     <>
@@ -92,6 +93,17 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
                     <span>Qtd {numero(i.qtd)} {i.unidade}</span>
                     <span>Retirado {numero(i.qtd_retirada)}</span>
                     {i.status_aprovacao && <span>Aprovação: {i.status_aprovacao}</span>}
+                    {mat(i.material)?.planejador_mrp && (
+                      <span title="Planejador MRP e tipo de MRP (ZMR37)">
+                        MRP {mat(i.material)?.planejador_mrp}
+                        {mat(i.material)?.tipo_mrp ? ` · ${mat(i.material)?.tipo_mrp}` : ''}
+                      </span>
+                    )}
+                    {mat(i.material)?.estoque_livre != null && (
+                      <span className={Number(mat(i.material)?.estoque_livre) > 0 ? 'text-good-ink' : undefined}>
+                        Estoque livre {numero(mat(i.material)?.estoque_livre)} {i.unidade}
+                      </span>
+                    )}
                     {i.preco_medio && <span>{moeda(Number(i.preco_medio) * Number(i.qtd ?? 0))}</span>}
                     {i.removido_em && <span className="text-warn-ink">Fora do último relatório</span>}
                   </div>

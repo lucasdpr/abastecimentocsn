@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { BASES } from '@/lib/bases'
 import { query, queryOne } from '@/lib/db'
 import { concluirImportacao, importarLote, iniciarImportacao } from '@/lib/importacao'
-import { lerAbas } from '@/lib/planilha'
+import { ehXlsx, lerAbas, planilhaDeTexto } from '@/lib/planilha'
 import { PREFIXO_ROBO, roboAutorizado, semAcento, tokenRobo } from '@/lib/robo'
 
 export const maxDuration = 60
@@ -68,10 +68,11 @@ export async function POST(request: Request) {
   let abas
   try {
     const wb = new ExcelJS.Workbook()
-    await wb.xlsx.load(conteudo as unknown as ArrayBuffer)
+    if (ehXlsx(conteudo)) await wb.xlsx.load(conteudo as unknown as ArrayBuffer)
+    else planilhaDeTexto(wb, conteudo)
     abas = lerAbas(wb)
   } catch {
-    return texto(400, [`ERRO: nao consegui ler ${arquivo.name}. Confira se e .xlsx.`])
+    return texto(400, [`ERRO: nao consegui ler ${arquivo.name}. Confira se e .xlsx ou o texto salvo pelo SAP.`])
   }
   if (!abas.length) return texto(422, [`ERRO: ${arquivo.name} nao tem nenhuma planilha reconhecida (cabecalho diferente do esperado).`])
 
