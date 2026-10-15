@@ -1,6 +1,6 @@
 import 'server-only'
 import { query, queryOne } from './db'
-import { garantirEsquemaEventos } from './importacao'
+import { garantirColunasOrdens, garantirEsquemaEventos } from './importacao'
 
 export async function configuracoes() {
   const rows = await query<{ chave: string; valor: string }>('select chave, valor from configuracoes')
@@ -233,11 +233,14 @@ export type OrdemSap = {
 }
 
 export async function detalheOrdem(ordem: string) {
+  await garantirColunasOrdens()
   const resumo = await queryOne<OrdemResumo>(`${ORDEM_SELECT} where o.ordem = $1`, [ordem])
   const [itens, pedidos, eventos, antecs, sap] = await Promise.all([
     query(
       `select reserva, item, material, descricao, qtd, unidade, qtd_retirada, data_necessidade, status_item,
-              status_aprovacao, eliminado, preco_medio, removido_em
+              status_aprovacao, eliminado, preco_medio, removido_em,
+              texto_reserva, tipo_mrp, rc, item_rc, data_solicitacao_rc, status_rc, po, item_po, data_remessa, status_po,
+              status_processo, observacao_base, apoio, nova_data
          from ordem_itens where ordem = $1 order by eliminado, reserva, item::int nulls last`,
       [ordem],
     ),

@@ -20,6 +20,9 @@ const CAMPOS_HISTORICO: Partial<Record<BaseId, Record<string, string>>> = {
     status_usuario: 'Status usuário',
     status_sistema: 'Status sistema',
     qtd_retirada: 'Qtd. retirada',
+    rc: 'RC',
+    po: 'Pedido',
+    data_remessa: 'Data de remessa',
   },
   fup: { status_sap: 'Status SAP', data_remessa_corrigida: 'Remessa corrigida' },
   ativacao: { status_po: 'Status do PO', data_remessa: 'Data remessa', faixa_atraso: 'Faixa de atraso' },
@@ -133,6 +136,28 @@ function garantirTabela(base: Base) {
 
 let colunaGarantida: Promise<unknown> | null = null
 /** Garante a coluna que liga o evento à importação (idempotente; evita quebrar se o banco ainda não foi migrado). */
+/** Colunas da planilha base (RC, pedido, MRP...) em ordem_itens: bancos criados antes delas ganham as colunas sozinhos. */
+export const COLUNAS_PLANILHA_BASE = [
+  'texto_reserva', 'tipo_mrp', 'rc', 'item_rc', 'data_solicitacao_rc', 'status_rc', 'po', 'item_po',
+  'data_remessa', 'status_po', 'status_processo', 'observacao_base', 'apoio', 'nova_data',
+]
+let colunasOrdensGarantidas: Promise<unknown> | null = null
+export function garantirColunasOrdens() {
+  colunasOrdensGarantidas ??= queryOne(
+    "select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'ordem_itens' and column_name = 'nova_data'",
+  )
+    .then((existe) =>
+      existe
+        ? null
+        : query(`alter table ordem_itens ${COLUNAS_PLANILHA_BASE.map((c) => `add column if not exists ${c} text`).join(', ')}`),
+    )
+    .catch((erro) => {
+      colunasOrdensGarantidas = null
+      throw erro
+    })
+  return colunasOrdensGarantidas
+}
+
 export function garantirEsquemaEventos() {
   // Consulta antes de alterar: "alter table" trava a tabela mesmo quando a coluna já existe.
   colunaGarantida ??= queryOne(
@@ -176,6 +201,7 @@ function textoValor(v: unknown) {
 
 export async function iniciarImportacao(baseId: BaseId, arquivo: string, usuarioId: number | null) {
   await garantirTabela(BASES[baseId])
+  if (baseId === 'ordens') await garantirColunasOrdens()
   const row = await queryOne<{ id: number }>(
     'insert into importacoes (base, arquivo, usuario_id) values ($1, $2, $3) returning id',
     [baseId, arquivo.slice(0, 200), usuarioId],

@@ -1,5 +1,7 @@
 ' =====================================================================
 '  Robo IW38 - Central de Abastecimento
+'  Autor: Lucas (matricula CBK3574) - GitHub: https://github.com/lucasdpr
+'  Projeto: https://github.com/lucasdpr/abastecimentocsn
 '  1) Exporta a IW38 do SAP (SAP precisa estar ABERTO e LOGADO)
 '  2) Salva em Desktop\robo IW38\IW38.xlsx (formato XLSX, direto em arquivo)
 '  3) Envia para o app, que atualiza e registra "O que mudou"
