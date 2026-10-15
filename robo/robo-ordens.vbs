@@ -115,14 +115,17 @@ Registrar "IW38: " & (UBound(ordens) + 1) & " ordens"
 
 ' ---------- 2. ZPMX0018: itens de reserva (a base) ----------
 Inicio "ZPMX0018"
+EsperarCampo "wnd[0]/usr/ctxtS_SWERK-LOW", "ZPMX0018"
+Preencher "wnd[0]/usr/chkP_ENCE", True
+Preencher "wnd[0]/usr/ctxtS_SWERK-LOW", CENTRO
+Preencher "wnd[0]/usr/ctxtS_ERDAT-LOW", DATA_DE
+Preencher "wnd[0]/usr/ctxtS_ERDAT-HIGH", DATA_ATE
 On Error Resume Next
-session.findById("wnd[0]/usr/chkP_ENCE").selected = True
-session.findById("wnd[0]/usr/ctxtS_SWERK-LOW").text = CENTRO
-session.findById("wnd[0]/usr/ctxtS_ERDAT-LOW").text = DATA_DE
-session.findById("wnd[0]/usr/ctxtS_ERDAT-HIGH").text = DATA_ATE
 ColarLista "wnd[0]/usr/btn%_S_AUFNR_%_APP_%-VALU_PUSH", ordens
-session.findById("wnd[0]/usr/ctxtP_LAYOUT").text = ZPM_LAYOUT
-Checar "preencher a ZPMX0018"
+Checar "colar as ordens na ZPMX0018"
+On Error GoTo 0
+Preencher "wnd[0]/usr/ctxtP_LAYOUT", ZPM_LAYOUT
+On Error Resume Next
 Executar
 If Not Existe("wnd[0]/usr/cntlCC_ALV/shellcont/shell") Then Falhar "A ZPMX0018 nao retornou a lista (nenhum item ou tela diferente da esperada)."
 Dim arqZpm
@@ -566,16 +569,68 @@ End Function
 ' =====================================================================
 ' Abre a transacao (do zero). Deixa "On Error Resume Next" ligado: quem chama confere com Checar.
 Sub Inicio(transacao)
+  Dim i
   Registrar transacao
   On Error Resume Next
+  ' Fecha janelinhas que tenham sobrado da etapa anterior (elas travam o /n)
+  For i = 1 To 5
+    If Not Existe("wnd[1]") Then Exit For
+    Registrar "Aviso: fechando janela aberta antes da " & transacao & ": " & TextoJanela("wnd[1]")
+    session.findById("wnd[1]").close
+    Esperar 1
+  Next
   session.findById("wnd[0]").maximize
   session.findById("wnd[0]/tbar[0]/okcd").text = "/n" & transacao
   session.findById("wnd[0]").sendVKey 0
+  Esperar 2
   If Err.Number <> 0 Then Falhar "Nao consegui abrir a transacao " & transacao & ": " & Err.Description
 End Sub
 
+' Espera um campo da tela aparecer (SAP lento). Falha dizendo em que tela parou.
+Sub EsperarCampo(id, transacao)
+  Dim i
+  For i = 1 To 30
+    If Existe(id) Then Exit Sub
+    Esperar 1
+  Next
+  Falhar "A tela da " & transacao & " nao abriu como esperado (campo " & id & " nao existe)." & vbCrLf & "Tela atual: " & TelaAtual()
+End Sub
+
+' Preenche um campo; se nao existir, diz qual campo e em que tela.
+Sub Preencher(id, valor)
+  On Error Resume Next
+  If Not Existe(id) Then Falhar "Campo nao encontrado: " & id & vbCrLf & "Tela atual: " & TelaAtual()
+  If VarType(valor) = vbBoolean Then
+    session.findById(id).selected = valor
+  Else
+    session.findById(id).text = valor
+  End If
+  If Err.Number <> 0 Then Falhar "Nao consegui preencher " & id & ": " & Err.Description & vbCrLf & "Tela atual: " & TelaAtual()
+End Sub
+
+Sub Esperar(segundos)
+  Dim i
+  WScript.Sleep segundos * 1000
+  For i = 1 To 60
+    If Not session.Busy Then Exit Sub
+    WScript.Sleep 500
+  Next
+End Sub
+
+Function TextoJanela(id)
+  On Error Resume Next
+  TextoJanela = session.findById(id).text
+  If Existe(id & "/usr/txtMESSTXT1") Then TextoJanela = TextoJanela & " - " & session.findById(id & "/usr/txtMESSTXT1").text
+End Function
+
+Function TelaAtual()
+  On Error Resume Next
+  TelaAtual = session.Info.Transaction & " / " & TextoJanela("wnd[0]") & " | barra: " & session.findById("wnd[0]/sbar").text
+  If Existe("wnd[1]") Then TelaAtual = TelaAtual & " | janela aberta: " & TextoJanela("wnd[1]")
+End Function
+
 Sub Checar(oque)
-  If Err.Number <> 0 Then Falhar "Falha ao " & oque & ": " & Err.Description
+  If Err.Number <> 0 Then Falhar "Falha ao " & oque & ": " & Err.Description & vbCrLf & "Tela atual: " & TelaAtual()
   Err.Clear
 End Sub
 
