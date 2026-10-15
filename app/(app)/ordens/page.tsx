@@ -166,7 +166,7 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
 
 function Mudanca({ quando, descricao }: { quando: string; descricao?: string }) {
   return (
-    <p className="mt-1.5 truncate text-xs text-accent" title={descricao}>
+    <p className="mt-1.5 line-clamp-2 text-xs text-accent" title={descricao}>
       Mudou {dataHora(quando)}
       {descricao && <span className="text-muted"> · {descricao}</span>}
     </p>
