@@ -32,6 +32,17 @@ PASTA = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\Desktop\robo IW38"
 silencioso = False
 If WScript.Arguments.Count > 0 Then silencioso = (LCase(WScript.Arguments(0)) = "/silencioso")
 If Not fso.FolderExists(PASTA) Then fso.CreateFolder PASTA
+
+' So um robo por vez mexendo no SAP (IW38 e ORDENS usam a mesma trava).
+' O arquivo fica aberto enquanto o robo roda; o Windows solta sozinho quando ele termina.
+Dim trava
+On Error Resume Next
+Set trava = fso.OpenTextFile(sh.ExpandEnvironmentStrings("%TEMP%") & "\robo_sap.trava", 2, True)
+If Err.Number <> 0 Then
+  If Not silencioso Then MsgBox "Ja tem um robo do SAP rodando neste PC (IW38 ou ORDENS). Espere ele terminar.", vbExclamation, "Robo IW38"
+  WScript.Quit 1
+End If
+On Error GoTo 0
 caminho = PASTA & "\" & ARQUIVO
 historico = PASTA & "\historico.txt"
 
@@ -51,6 +62,23 @@ End Sub
 Function Existe(id)
   Existe = Not (session.findById(id, False) Is Nothing)
 End Function
+
+' Botao "Gerar" da janela de salvar. Se o SAP disser que o arquivo ja existe,
+' usa "Substituir"; se a janela continuar aberta, para e diz o motivo.
+Sub ConfirmarSalvar(nome)
+  On Error Resume Next
+  session.findById("wnd[1]/tbar[0]/btn[0]").press
+  WScript.Sleep 1000
+  If Existe("wnd[1]/usr/ctxtDY_FILENAME") And Existe("wnd[1]/tbar[0]/btn[11]") Then
+    session.findById("wnd[1]/tbar[0]/btn[11]").press
+    WScript.Sleep 1000
+  End If
+  If Existe("wnd[1]/usr/ctxtDY_FILENAME") Then
+    Falhar "O SAP nao conseguiu salvar " & nome & ": " & session.findById("wnd[0]/sbar").text & vbCrLf & _
+      "Feche esse arquivo se estiver aberto no Excel e rode de novo."
+  End If
+  Err.Clear
+End Sub
 
 ' ---------- 1. SAP aberto e logado ----------
 Dim SapGuiAuto, application, connection, session
@@ -117,7 +145,7 @@ End If
 If Existe("wnd[1]/usr/ctxtDY_PATH") Then
   session.findById("wnd[1]/usr/ctxtDY_PATH").text = PASTA
   If Existe("wnd[1]/usr/ctxtDY_FILENAME") Then session.findById("wnd[1]/usr/ctxtDY_FILENAME").text = ARQUIVO
-  session.findById("wnd[1]/tbar[0]/btn[0]").press
+  ConfirmarSalvar ARQUIVO
 Else
   Registrar "Aviso: janela de pasta nao apareceu como esperado"
 End If
