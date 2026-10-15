@@ -15,8 +15,8 @@ export async function GET(request: Request) {
   if (!token) return NextResponse.json({ erro: 'Configure ROBO_TOKEN (24+ caracteres) na Vercel.' }, { status: 503 })
   const url = new URL(request.url)
   const origem = url.origin
-  // ordens: IW38 + ZPMX0018 (atualiza a base Ordens); iw38: só a IW38.
-  const nome = url.searchParams.get('robo') === 'iw38' ? 'robo-iw38.vbs' : 'robo-ordens.vbs'
+  // Um robô só: IW38 + ZPMX0018 + compras, monta a planilha base e envia tudo.
+  const nome = 'robo-ordens.vbs'
   const modelo = await readFile(path.join(process.cwd(), 'robo', nome), 'utf8')
   // VBScript lê o arquivo como ANSI e espera quebra de linha do Windows.
   const script = modelo.replaceAll('{{URL_APP}}', origem).replaceAll('{{TOKEN}}', token).replace(/\r?\n/g, '\r\n')

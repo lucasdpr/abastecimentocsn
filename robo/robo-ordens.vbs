@@ -11,7 +11,9 @@
 '   6) ME5A      item e data da RC          (pelo no de acompanhamento)
 '   7) ME2M      item e data de remessa do pedido (pelos materiais)
 '   8) Monta a planilha base (mantendo as colunas preenchidas a mao)
-'   9) Envia a planilha para o app
+'   9) Envia para o app a planilha base e a IW38 (status das ordens)
+'
+'  E o unico robo: substitui o antigo robo IW38 (pode apagar o robo-iw38.vbs).
 '
 '  SAP precisa estar ABERTO e LOGADO. Uso: dois cliques.
 '  Para rodar sem janelas (Agendador do Windows):
@@ -39,16 +41,14 @@ Const IWBK_LAYOUT = "/LUGMLC"
 Const ME5A_LAYOUT = "/LAS-KF"
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
-Dim fso, sh, silencioso, historico, desktop, pastaIw38, pastaOrdens, pastaSap, pastaBackup, xl
+Dim fso, sh, silencioso, historico, desktop, pastaOrdens, pastaSap, pastaBackup, xl
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 Set xl = Nothing
 desktop = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\Desktop"
-pastaIw38 = desktop & "\robo IW38"
 pastaOrdens = desktop & "\robo ordens"
 pastaSap = pastaOrdens & "\relatorios SAP"
 pastaBackup = pastaOrdens & "\backup"
-CriarPasta pastaIw38
 CriarPasta pastaOrdens
 CriarPasta pastaSap
 CriarPasta pastaBackup
@@ -56,13 +56,13 @@ historico = pastaOrdens & "\historico.txt"
 silencioso = False
 If WScript.Arguments.Count > 0 Then silencioso = (LCase(WScript.Arguments(0)) = "/silencioso")
 
-' So um robo por vez mexendo no SAP (IW38 e ORDENS usam a mesma trava).
+' So um robo por vez mexendo no SAP (evita dois cliques rodarem dois robos juntos).
 ' O arquivo fica aberto enquanto o robo roda; o Windows solta sozinho quando ele termina.
 Dim trava
 On Error Resume Next
 Set trava = fso.OpenTextFile(sh.ExpandEnvironmentStrings("%TEMP%") & "\robo_sap.trava", 2, True)
 If Err.Number <> 0 Then
-  If Not silencioso Then MsgBox "Ja tem um robo do SAP rodando neste PC (IW38 ou ORDENS). Espere ele terminar.", vbExclamation, "Robo ORDENS"
+  If Not silencioso Then MsgBox "O robo ja esta rodando neste PC. Espere ele terminar.", vbExclamation, "Robo ORDENS"
   WScript.Quit 1
 End If
 On Error GoTo 0
@@ -109,14 +109,14 @@ Checar "preencher a IW38"
 Executar
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 Dim arqIw38
-arqIw38 = pastaIw38 & "\IW38.xlsx"
+arqIw38 = pastaSap & "\IW38.xlsx"
 Apagar arqIw38
 desde = Now
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").setCurrentCell -1, ""
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectAll
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").contextMenu
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectContextMenuItem "&XXL"
-SalvarComo pastaIw38, "IW38.xlsx"
+SalvarComo pastaSap, "IW38.xlsx"
 Checar "exportar a IW38"
 On Error GoTo 0
 EsperarArquivo arqIw38, desde
@@ -303,11 +303,14 @@ Dim resumo : resumo = MontarPlanilhaBase()
 Registrar resumo
 
 ' ---------- 9. Envia para o app ----------
-Dim resultado
+Dim resultado, resultadoIw38
 resultado = EnviarPlanilha(caminhoBase, PLANILHA_BASE)
 Registrar resultado
+' IW38 tambem vai para o app: status SAP das ordens e OMs sem itens de material
+resultadoIw38 = EnviarPlanilha(arqIw38, "IW38.xlsx")
+Registrar resultadoIw38
 FecharExcel
-If Not silencioso Then MsgBox "Pronto. Planilha base atualizada e app atualizado:" & vbCrLf & vbCrLf & resumo & vbCrLf & vbCrLf & resultado, vbInformation, "Robo ORDENS"
+If Not silencioso Then MsgBox "Pronto. Planilha base atualizada e app atualizado:" & vbCrLf & vbCrLf & resumo & vbCrLf & vbCrLf & resultado & vbCrLf & resultadoIw38, vbInformation, "Robo ORDENS"
 
 
 ' =====================================================================
@@ -1057,9 +1060,9 @@ Function EnviarPlanilha(caminho, nome)
     bytes = todo.Read(PARTE_BYTES)
     EnviarParte bytes, envio, parte, total, nome, status, texto, erro
     If parte < total Then
-      If status <> 202 Then Falhar "A planilha base foi salva, mas o envio para o app falhou (parte " & parte & " de " & total & ")." & vbCrLf & vbCrLf & erro & vbCrLf & texto
+      If status <> 202 Then Falhar "A planilha base foi salva, mas o envio de " & nome & " para o app falhou (parte " & parte & " de " & total & ")." & vbCrLf & vbCrLf & erro & vbCrLf & texto
     ElseIf status <> 200 Then
-      Falhar "A planilha base foi salva, mas o envio para o app falhou." & vbCrLf & vbCrLf & erro & vbCrLf & texto & vbCrLf & vbCrLf & _
+      Falhar "A planilha base foi salva, mas o envio de " & nome & " para o app falhou." & vbCrLf & vbCrLf & erro & vbCrLf & texto & vbCrLf & vbCrLf & _
         "Teste: abra " & URL_APP & " no navegador deste PC."
     End If
   Next

@@ -108,13 +108,9 @@ export default async function PaginaImportar() {
               </p>
             ) : pode.administrar(usuario) ? (
               <div className="space-y-3 text-sm text-ink-2">
-                <p>Ligado. Robôs disponíveis:</p>
-                <a className="btn w-full justify-between" href="/api/robo/script?robo=ordens">
-                  <span>Ordens (IW38 + ZPMX0018)</span>
-                  <Download className="size-4" />
-                </a>
-                <a className="btn w-full justify-between" href="/api/robo/script?robo=iw38">
-                  <span>Só IW38 (dados das ordens)</span>
+                <p>Ligado. Um robô faz tudo: IW38, ZPMX0018, IWBK, ZMR37, MELB, ME5A e ME2M, monta a planilha base e envia para cá.</p>
+                <a className="btn w-full justify-between" href="/api/robo/script">
+                  <span>Baixar robô (robo-ordens.vbs)</span>
                   <Download className="size-4" />
                 </a>
                 <p className="text-xs text-muted">O arquivo baixado já vem com a chave do robô: guarde só no PC que roda o SAP.</p>
