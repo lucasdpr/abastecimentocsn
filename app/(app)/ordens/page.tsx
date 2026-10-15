@@ -5,22 +5,24 @@ import { SeletorFiltro } from '@/components/seletor-filtro'
 import { Busca, Cabecalho, Filtros, Paginacao, Vazio } from '@/components/ui'
 import { exigirUsuario } from '@/lib/auth'
 import { gruposPlanejamento, listarOrdens, responsaveisGrupos } from '@/lib/consultas'
-import { data, moeda, nomeCurto, numero } from '@/lib/formato'
+import { data, dataHora, moeda, nomeCurto, numero } from '@/lib/formato'
 
 export const metadata = { title: 'Ordens' }
 
-type Params = { busca?: string; filtro?: string; grupo?: string; pagina?: string }
+type Params = { busca?: string; filtro?: string; grupo?: string; dias?: string; pagina?: string }
 
 export default async function PaginaOrdens({ searchParams }: { searchParams: Promise<Params> }) {
   await exigirUsuario()
   const sp = await searchParams
   const pagina = Math.max(1, Number(sp.pagina) || 1)
-  const [{ linhas, total, porPagina, cfg, soSap }, grupos, resp] = await Promise.all([
-    listarOrdens({ busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo, pagina }),
+  const recentes = sp.filtro === 'recentes'
+  const dias = Number(sp.dias) || 7
+  const [{ linhas, total, porPagina, cfg, soSap, ultimaMudanca }, grupos, resp] = await Promise.all([
+    listarOrdens({ busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo, dias, pagina }),
     gruposPlanejamento(),
     responsaveisGrupos(),
   ])
-  const parametros = { busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo }
+  const parametros = { busca: sp.busca, filtro: sp.filtro, grupo: sp.grupo, dias: recentes ? sp.dias : undefined }
 
   return (
     <>
@@ -35,18 +37,22 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
             { valor: sp.busca ? 'abertas' : '', rotulo: 'Em aberto' },
             { valor: 'paradas', rotulo: `Paradas ≥ ${cfg.diasSemMovimentacao}d` },
             { valor: 'vencidas', rotulo: 'Necessidade vencida' },
+            { valor: 'recentes', rotulo: 'Últimas mudanças' },
             { valor: 'cobradas', rotulo: 'Cobradas' },
             { valor: 'encerradas', rotulo: 'Atendidas' },
             { valor: 'todas', rotulo: 'Todas' },
           ]}
         />
+        {recentes && (
+          <SeletorFiltro base="/ordens" parametros={parametros} chave="dias" rotulo="Período" opcoes={[{ valor: '1', rotulo: 'Hoje' }, { valor: '', rotulo: 'Últimos 7 dias' }, { valor: '30', rotulo: 'Últimos 30 dias' }]} />
+        )}
         {grupos.length > 1 && (
           <SeletorFiltro base="/ordens" parametros={parametros} chave="grupo" rotulo="Grupo de planejamento" opcoes={[{ valor: '', rotulo: 'Todos' }, ...grupos.map((g) => ({ valor: g, rotulo: g }))]} />
         )}
       </div>
 
       <p className="mb-2 text-xs text-muted">
-        {numero(total)} ordens{sp.busca && !sp.filtro && ` · busca em todas as ordens, inclusive atendidas${soSap.length ? ` e encerradas só na IW38 (${soSap.length})` : ''}`}
+        {numero(total)} ordens{recentes && ` com mudança no SAP ${dias === 1 ? 'hoje' : `nos últimos ${dias} dias`}, mais recentes primeiro`}{sp.busca && !sp.filtro && ` · busca em todas as ordens, inclusive atendidas${soSap.length ? ` e encerradas só na IW38 (${soSap.length})` : ''}`}
       </p>
 
       {!linhas.length && !soSap.length ? (
@@ -73,6 +79,7 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                       <SeloParada diasParada={o.dias_parada} limite={cfg.diasSemMovimentacao} abertos={o.itens_abertos} />
                       <span>{o.itens_abertos}/{o.itens} itens abertos</span>
                     </div>
+                    {recentes && <Mudanca quando={o.ultima_mudanca_em} descricao={ultimaMudanca.get(o.ordem)?.descricao} />}
                   </div>
                   <ChevronRight className="size-4 shrink-0 text-muted" />
                 </Link>
@@ -109,6 +116,7 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
                     <td className="w-full max-w-0 min-w-40">
                       <div className="truncate" title={o.texto_ordem ?? undefined}>{o.texto_ordem ?? '—'}</div>
                       <div className="truncate text-xs text-muted">{o.local_instalacao}</div>
+                      {recentes && <Mudanca quando={o.ultima_mudanca_em} descricao={ultimaMudanca.get(o.ordem)?.descricao} />}
                     </td>
                     <td>
                       <StatusSap usuario={o.status_usuario} sistema={o.status_sistema} />
@@ -153,5 +161,14 @@ export default async function PaginaOrdens({ searchParams }: { searchParams: Pro
         </>
       )}
     </>
+  )
+}
+
+function Mudanca({ quando, descricao }: { quando: string; descricao?: string }) {
+  return (
+    <p className="mt-1.5 line-clamp-2 text-xs text-accent" title={descricao}>
+      Mudou {dataHora(quando)}
+      {descricao && <span className="text-muted"> · {descricao}</span>}
+    </p>
   )
 }
