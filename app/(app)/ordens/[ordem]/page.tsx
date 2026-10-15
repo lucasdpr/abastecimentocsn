@@ -23,6 +23,49 @@ type Item = {
   eliminado: boolean
   preco_medio: string | null
   removido_em: string | null
+  texto_reserva: string | null
+  tipo_mrp: string | null
+  rc: string | null
+  item_rc: string | null
+  data_solicitacao_rc: string | null
+  status_rc: string | null
+  po: string | null
+  item_po: string | null
+  data_remessa: string | null
+  status_po: string | null
+  status_processo: string | null
+  observacao_base: string | null
+  apoio: string | null
+  nova_data: string | null
+}
+
+/** Datas da planilha base vêm como texto: uma data (ISO) ou várias juntas ("22/10/2027, 10/08/2027"). */
+function dataTexto(v: string | null) {
+  if (!v) return null
+  return /^\d{4}-\d{2}-\d{2}/.test(v) ? data(v) : v
+}
+
+/** RC, pedido e anotações da planilha base (robô ORDENS). */
+function CompraItem({ i }: { i: Item }) {
+  const linhas = [
+    i.rc && `RC ${i.rc}${i.item_rc ? ` / item ${i.item_rc}` : ''}${i.data_solicitacao_rc ? ` · solicitada ${dataTexto(i.data_solicitacao_rc)}` : ''}${i.status_rc ? ` · ${i.status_rc}` : ''}`,
+    i.po && `Pedido ${i.po}${i.item_po ? ` / item ${i.item_po}` : ''}${i.data_remessa ? ` · remessa ${dataTexto(i.data_remessa)}` : ''}${i.status_po ? ` · ${i.status_po}` : ''}`,
+    [i.status_processo, i.observacao_base, i.apoio && `Apoio: ${i.apoio}`, i.nova_data && `Nova data: ${dataTexto(i.nova_data)}`].filter(Boolean).join(' · '),
+  ].filter(Boolean) as string[]
+  if (!linhas.length && !i.texto_reserva && !i.tipo_mrp) return null
+  return (
+    <div className="mt-2 space-y-0.5 rounded-lg bg-surface-2/60 px-2.5 py-1.5 text-xs text-ink-2">
+      {(i.texto_reserva || i.tipo_mrp) && (
+        <div className="text-muted">
+          {i.tipo_mrp && <span className="mr-2 font-medium text-ink-2">MRP {i.tipo_mrp}</span>}
+          {i.texto_reserva}
+        </div>
+      )}
+      {linhas.map((l) => (
+        <div key={l} className="num">{l}</div>
+      ))}
+    </div>
+  )
 }
 
 function seloItem(i: Item) {
@@ -95,6 +138,7 @@ export default async function PaginaOrdem({ params }: { params: Promise<{ ordem:
                     {i.preco_medio && <span>{moeda(Number(i.preco_medio) * Number(i.qtd ?? 0))}</span>}
                     {i.removido_em && <span className="text-warn-ink">Fora do último relatório</span>}
                   </div>
+                  <CompraItem i={i} />
                 </li>
               ))}
             </ul>
