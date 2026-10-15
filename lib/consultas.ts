@@ -148,9 +148,9 @@ export async function painel() {
   return { cfg, resumo: resumo!, fases, prazos, grupos, maiores, aprovacao, fupResumo: fupResumo!, fupSemanas, fupResponsavel, antecs, importacoes }
 }
 
-export type FiltroOrdens = { busca?: string; filtro?: string; grupo?: string; pagina?: number }
+export type FiltroOrdens = { busca?: string; filtro?: string; grupo?: string; pagina?: number; dias?: number }
 
-export async function listarOrdens({ busca, filtro, grupo, pagina = 1 }: FiltroOrdens) {
+export async function listarOrdens({ busca, filtro, grupo, pagina = 1, dias = 7 }: FiltroOrdens) {
   const cfg = await configuracoes()
   const where: string[] = []
   const params: unknown[] = [cfg.diasSemMovimentacao, cfg.diasRecobranca]
@@ -170,13 +170,19 @@ export async function listarOrdens({ busca, filtro, grupo, pagina = 1 }: FiltroO
   if (filtro === 'vencidas') where.push('o.itens_abertos > 0 and o.necessidade_mais_antiga < current_date')
   if (filtro === 'cobradas') where.push("a.situacao in ('cobrado', 'aguardando')")
   if (filtro === 'encerradas') where.push('o.itens_abertos = 0')
+  // Últimas mudanças: o que o SAP mudou nos últimos N dias (abertas ou não), mais recente primeiro.
+  const recentes = filtro === 'recentes'
+  if (recentes) {
+    params.push(Math.min(Math.max(Math.round(dias) || 7, 1), 90))
+    where.push(`o.ultima_mudanca_em >= (((now() at time zone 'America/Sao_Paulo')::date - ($${params.length}::int - 1))::timestamp at time zone 'America/Sao_Paulo')`)
+  }
   // Garante que $1/$2 sejam sempre usados (evita erro de tipo do Postgres).
   where.push('$1::int >= 0 and $2::int >= 0')
   const porPagina = 50
   const sqlWhere = `where ${where.join(' and ')}`
   const [linhas, total] = await Promise.all([
     query<OrdemResumo>(
-      `${ORDEM_SELECT} ${sqlWhere} order by o.ultima_mudanca_em asc, o.ordem limit ${porPagina} offset ${(pagina - 1) * porPagina}`,
+      `${ORDEM_SELECT} ${sqlWhere} order by o.ultima_mudanca_em ${recentes ? 'desc' : 'asc'}, o.ordem limit ${porPagina} offset ${(pagina - 1) * porPagina}`,
       params,
     ),
     queryOne<{ total: number }>(
@@ -194,7 +200,17 @@ export async function listarOrdens({ busca, filtro, grupo, pagina = 1 }: FiltroO
         [`%${busca.trim()}%`],
       ).catch(() => [])
     : []
-  return { linhas, total: total?.total ?? 0, porPagina, cfg, soSap }
+  // Na lista de últimas mudanças, o que mudou por último em cada ordem (histórico).
+  const ultimaMudanca = new Map<string, { descricao: string; criado_em: string }>()
+  if (recentes && linhas.length) {
+    const ev = await query<{ chave: string; descricao: string; criado_em: string }>(
+      `select distinct on (chave) chave, descricao, criado_em from eventos
+        where entidade = 'ordem' and chave = any($1) order by chave, criado_em desc`,
+      [linhas.map((l) => l.ordem)],
+    )
+    for (const e of ev) ultimaMudanca.set(e.chave, e)
+  }
+  return { linhas, total: total?.total ?? 0, porPagina, cfg, soSap, ultimaMudanca }
 }
 
 export async function gruposPlanejamento() {
