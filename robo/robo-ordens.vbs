@@ -40,7 +40,9 @@ Const CENTRO = "01"
 Const IW38_LAYOUT = "/CLAUDINEIA"
 Const ZPM_LAYOUT = "/ERICA"
 Const IWBK_LAYOUT = "/LUGMLC"
-Const ME5A_LAYOUT = "/ERICA"   ' na lista aparece com acento no E; a busca ignora acento
+' ME5A: layout padrao (ja traz RC, item, data e Lib). O /ERICA (com acento) leu so 52 RCs
+' em 20/10; volta quando eu ver o ME5A.txt dele. Vazio = nao troca o layout.
+Const ME5A_LAYOUT = ""
 ' PO em aberto com atraso maior que isso vira "PO antigo - verificar" (saldo esquecido)
 Const DIAS_PO_ANTIGO = 180
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
@@ -261,7 +263,7 @@ session.findById("wnd[0]/usr/ctxtP_LSTUB").text = "ALV"
 session.findById("wnd[0]/usr/ctxtS_WERKS-LOW").text = CENTRO
 Checar "preencher a ME5A"
 Executar
-EscolherLayout ME5A_LAYOUT
+If ME5A_LAYOUT <> "" Then EscolherLayout ME5A_LAYOUT
 On Error GoTo 0
 Dim infoRc : Set infoRc = CreateObject("Scripting.Dictionary")
 Dim libDe : Set libDe = CreateObject("Scripting.Dictionary")
@@ -286,6 +288,7 @@ If ExportarTexto("ME5A.txt") Then
   Next
 End If
 Registrar "ME5A: " & infoRc.Count & " RCs"
+If infoRc.Count < rcsDe.Count / 2 Then Registrar "ATENCAO: a ME5A trouxe bem menos RCs que a MELB (" & infoRc.Count & " de " & rcsDe.Count & "); item e data da RC vao faltar"
 
 ' ---------- 7. ME2M: item e data de remessa do pedido ----------
 Inicio "ME2M"
@@ -543,14 +546,22 @@ Function MontarPlanilhaBase()
             faltando(ant(1, c)) = True
           End If
       End Select
-      out(linha, c - 1) = v
+      out(linha, c - 1) = Simples(v)
     Next
   Next
 
-  ' Grava: limpa as linhas antigas e escreve as novas de uma vez
+  ' Grava: limpa as linhas antigas e escreve as novas em blocos (um bloco gigante,
+  ' com mais de 65 mil linhas, chegou embaralhado no Excel em 20/10).
   xl.ScreenUpdating = False
   ws.Range(ws.Cells(2, 1), ws.Cells(nAnt, nCols)).ClearContents
-  ws.Range(ws.Cells(2, 1), ws.Cells(UBound(out, 1) + 2, nCols)).Value = out
+  GravarEmBlocos ws, out, nCols
+  ' Confere o que o Excel gravou antes de salvar. Se nao bater, nao salva nem envia.
+  msg = ConferirGravacao(ws, out, cab)
+  If msg <> "" Then
+    wb.Close False
+    Falhar "O Excel gravou a planilha errada (" & msg & ")." & vbCrLf & _
+      "A planilha base NAO foi alterada e nada foi enviado ao app. Avise o Lucas."
+  End If
   On Error Resume Next
   wb.Save
   If Err.Number <> 0 Then
@@ -1071,6 +1082,78 @@ Function SoDigitosFalso(v)
 End Function
 
 ' Data do SAP "22.10.2027" -> "22/10/2027"
+' Grava o array em blocos de linhas (o Excel embaralha arrays muito grandes)
+Sub GravarEmBlocos(ws, out, nCols)
+  Const BLOCO = 5000
+  Dim ini, fim, nl, blk, a, b
+  For ini = 0 To UBound(out, 1) Step BLOCO
+    fim = ini + BLOCO - 1
+    If fim > UBound(out, 1) Then fim = UBound(out, 1)
+    nl = fim - ini + 1
+    ReDim blk(nl - 1, nCols - 1)
+    For a = 0 To nl - 1
+      For b = 0 To nCols - 1
+        blk(a, b) = out(ini + a, b)
+      Next
+    Next
+    ws.Range(ws.Cells(ini + 2, 1), ws.Cells(fim + 2, nCols)).Value = blk
+  Next
+End Sub
+
+' Le de volta Reserva item, Ordem, Status RC e Status PO e compara com o que mandou gravar.
+' Devolve "" se esta tudo certo, ou a descricao do primeiro problema.
+Function ConferirGravacao(ws, out, cab)
+  Dim nomes, h, c, lido, n, esperado, achado, erros, primeiro
+  ConferirGravacao = ""
+  n = UBound(out, 1) + 1
+  ' Nada pode ter sobrado abaixo da ultima linha
+  If Trim(CStr(ws.Cells(n + 2, 1).Value & "")) <> "" Then
+    ConferirGravacao = "sobrou dado na linha " & (n + 2)
+    Exit Function
+  End If
+  nomes = Array("reserva item", "ordem", "status rc", "status po", "rc")
+  For Each h In nomes
+    If cab.Exists(h) Then
+      c = cab(h)
+      lido = ws.Range(ws.Cells(2, c), ws.Cells(n + 1, c)).Value
+      erros = 0
+      primeiro = ""
+      For n = 1 To UBound(lido, 1)
+        esperado = Trim(CStr(out(n - 1, c - 1) & ""))
+        achado = Trim(CStr(lido(n, 1) & ""))
+        If esperado <> achado Then
+          erros = erros + 1
+          If primeiro = "" Then primeiro = "linha " & (n + 1) & ": esperado '" & esperado & "', gravou '" & achado & "'"
+        End If
+      Next
+      n = UBound(out, 1) + 1
+      If erros > 0 Then
+        ConferirGravacao = "coluna " & h & ": " & erros & " celulas diferentes; " & primeiro
+        Exit Function
+      End If
+    End If
+  Next
+End Function
+
+' Valor simples para o Excel: texto, numero, data ou vazio (nunca objeto/array)
+Function Simples(v)
+  Select Case VarType(v)
+    Case vbEmpty, vbNull : Simples = Empty
+    Case vbString : Simples = CStr(v)
+    Case vbDate : Simples = CDate(v)
+    Case vbBoolean : Simples = CBool(v)
+    Case vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal, vbByte : Simples = CDbl(v)
+    Case Else
+      If IsArray(v) Then
+        Simples = Unir(v, ", ")
+      ElseIf IsObject(v) Then
+        Simples = Empty
+      Else
+        Simples = CStr(v)
+      End If
+  End Select
+End Function
+
 ' ---------- Status automaticos (regras combinadas com a Erica) ----------
 ' Status RC: pedido > RC (pela coluna Lib da ME5A) > sem RC (com ou sem estoque)
 Function StatusRc(acomp, mat)
