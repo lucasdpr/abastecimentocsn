@@ -296,6 +296,8 @@ On Error Resume Next
 ColarLista "wnd[0]/usr/btn%_EM_MATNR_%_APP_%-VALU_PUSH", materiais
 session.findById("wnd[0]/usr/ctxtEM_WERKS-LOW").text = CENTRO
 session.findById("wnd[0]/usr/ctxtLISTU").text = "ALV"
+' O SAP lembra o WE101 da rodada anterior: aqui tem que ir vazio (todos os pedidos)
+If Existe("wnd[0]/usr/ctxtSELPA-LOW") Then session.findById("wnd[0]/usr/ctxtSELPA-LOW").text = ""
 Checar "preencher a ME2M"
 Executar
 ' Visao "divisoes de remessa": traz a data de remessa
@@ -555,9 +557,20 @@ Function MontarPlanilhaBase()
   ' com mais de 65 mil linhas, chegou embaralhado no Excel em 20/10).
   xl.ScreenUpdating = False
   ws.Range(ws.Cells(2, 1), ws.Cells(nAnt, nCols)).ClearContents
+  On Error Resume Next
   GravarEmBlocos ws, out, nCols
+  If Err.Number <> 0 Then
+    msg = Err.Description
+    wb.Close False
+    Falhar "O Excel recusou a gravacao da planilha: " & msg & vbCrLf & "A planilha base NAO foi alterada e nada foi enviado ao app."
+  End If
   ' Confere o que o Excel gravou antes de salvar. Se nao bater, nao salva nem envia.
-  msg = ConferirGravacao(ws, out, cab)
+  msg = ConferirGravacao(ws, out, cab, nCols)
+  If Err.Number <> 0 Then
+    msg = "erro na conferencia: " & Err.Description
+    Err.Clear
+  End If
+  On Error GoTo 0
   If msg <> "" Then
     wb.Close False
     Falhar "O Excel gravou a planilha errada (" & msg & ")." & vbCrLf & _
@@ -1130,46 +1143,78 @@ Sub GravarEmBlocos(ws, out, nCols)
   Next
 End Sub
 
-' Le de volta Reserva item, Ordem, Status RC e Status PO e compara com o que mandou gravar.
-' Devolve "" se esta tudo certo, ou a descricao do primeiro problema.
-Function ConferirGravacao(ws, out, cab)
-  Dim nomes, h, c, lido, n, esperado, achado, erros, primeiro
+' Le de volta o que o Excel gravou e compara com o que foi mandado.
+' 1) Nenhuma celula pode ter virado erro (#N/D, #VALOR!...): mostra ate 3, com o valor mandado.
+' 2) Reserva item, Ordem, RC, Status RC e Status PO tem que bater exatamente.
+' Devolve "" se esta tudo certo, ou a descricao do problema (vai para a tela e o historico).
+Function ConferirGravacao(ws, out, cab, nCols)
+  Dim n, lido, lin, c, erros, txt, nomes, h, esperado, achado, primeiro, cabs
   ConferirGravacao = ""
   n = UBound(out, 1) + 1
-  ' Nada pode ter sobrado abaixo da ultima linha
-  If Trim(CStr(ws.Cells(n + 2, 1).Value & "")) <> "" Then
-    ConferirGravacao = "sobrou dado na linha " & (n + 2)
+  If Trim(TextoCelula(ws.Cells(n + 2, 1).Value)) <> "" Then
+    ConferirGravacao = "sobrou dado na linha " & (n + 2) & ", abaixo da ultima"
     Exit Function
   End If
-  nomes = Array("reserva item", "ordem", "status rc", "status po", "rc")
+  lido = ws.Range(ws.Cells(2, 1), ws.Cells(n + 1, nCols)).Value
+  cabs = ws.Range(ws.Cells(1, 1), ws.Cells(1, nCols)).Value
+  erros = 0
+  txt = ""
+  For lin = 1 To n
+    For c = 1 To nCols
+      If VarType(lido(lin, c)) = vbError Then
+        erros = erros + 1
+        If erros <= 3 Then txt = txt & vbCrLf & "  linha " & (lin + 1) & ", coluna '" & cabs(1, c) & "': mandei '" & TextoCelula(out(lin - 1, c - 1)) & "'"
+      End If
+    Next
+  Next
+  If erros > 0 Then
+    ConferirGravacao = erros & " celulas viraram erro no Excel. Primeiras:" & txt
+    Exit Function
+  End If
+  nomes = Array("reserva item", "ordem", "rc", "status rc", "status po")
   For Each h In nomes
     If cab.Exists(h) Then
       c = cab(h)
-      lido = ws.Range(ws.Cells(2, c), ws.Cells(n + 1, c)).Value
       erros = 0
       primeiro = ""
-      For n = 1 To UBound(lido, 1)
-        esperado = Trim(CStr(out(n - 1, c - 1) & ""))
-        achado = Trim(CStr(lido(n, 1) & ""))
+      For lin = 1 To n
+        esperado = TextoCelula(out(lin - 1, c - 1))
+        If Left(esperado, 1) = "'" Then esperado = Mid(esperado, 2)
+        achado = TextoCelula(lido(lin, c))
         If esperado <> achado Then
           erros = erros + 1
-          If primeiro = "" Then primeiro = "linha " & (n + 1) & ": esperado '" & esperado & "', gravou '" & achado & "'"
+          If primeiro = "" Then primeiro = "linha " & (lin + 1) & ": mandei '" & esperado & "', gravou '" & achado & "'"
         End If
       Next
-      n = UBound(out, 1) + 1
       If erros > 0 Then
-        ConferirGravacao = "coluna " & h & ": " & erros & " celulas diferentes; " & primeiro
+        ConferirGravacao = "coluna '" & h & "': " & erros & " celulas diferentes; " & primeiro
         Exit Function
       End If
     End If
   Next
 End Function
 
+' Texto de uma celula sem quebrar com valor de erro do Excel
+Function TextoCelula(v)
+  If VarType(v) = vbError Then
+    TextoCelula = "#ERRO"
+  ElseIf IsArray(v) Or IsObject(v) Then
+    TextoCelula = "#OBJETO"
+  Else
+    TextoCelula = Trim(CStr(v & ""))
+  End If
+End Function
+
 ' Valor simples para o Excel: texto, numero, data ou vazio (nunca objeto/array)
 Function Simples(v)
   Select Case VarType(v)
     Case vbEmpty, vbNull : Simples = Empty
-    Case vbString : Simples = CStr(v)
+    Case vbString
+      Simples = CStr(v)
+      ' Texto que comeca com = + - @ o Excel le como formula (vira #NOME?/#VALOR!): grava como texto
+      If Len(Simples) > 0 Then
+        If InStr("=+-@", Left(Simples, 1)) > 0 Then Simples = "'" & Simples
+      End If
     Case vbDate : Simples = CDate(v)
     Case vbBoolean : Simples = CBool(v)
     Case vbInteger, vbLong, vbSingle, vbDouble, vbCurrency, vbDecimal, vbByte : Simples = CDbl(v)
