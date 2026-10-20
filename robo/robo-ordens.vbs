@@ -10,8 +10,12 @@
 '   5) MELB      RC e pedido de cada reserva+item (no de acompanhamento)
 '   6) ME5A      item e data da RC          (pelo no de acompanhamento)
 '   7) ME2M      item e data de remessa do pedido (pelos materiais)
+'                e de novo com WE101 (so o que falta entregar: atraso)
 '   8) Monta a planilha base (mantendo as colunas preenchidas a mao)
-'   9) Envia a planilha para o app
+'      Status RC e Status PO sao preenchidos pelo robo (regras em StatusRc/StatusPo)
+'   9) Envia para o app a planilha base e a IW38 (status das ordens)
+'
+'  E o unico robo: substitui o antigo robo IW38 (pode apagar o robo-iw38.vbs).
 '
 '  SAP precisa estar ABERTO e LOGADO. Uso: dois cliques.
 '  Para rodar sem janelas (Agendador do Windows):
@@ -36,25 +40,36 @@ Const CENTRO = "01"
 Const IW38_LAYOUT = "/CLAUDINEIA"
 Const ZPM_LAYOUT = "/ERICA"
 Const IWBK_LAYOUT = "/LUGMLC"
-Const ME5A_LAYOUT = "/LAS-KF"
+Const ME5A_LAYOUT = "/ERICA"   ' na lista aparece com acento no E; a busca ignora acento
+' PO em aberto com atraso maior que isso vira "PO antigo - verificar" (saldo esquecido)
+Const DIAS_PO_ANTIGO = 180
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
-Dim fso, sh, silencioso, historico, desktop, pastaIw38, pastaOrdens, pastaSap, pastaBackup, xl
+Dim fso, sh, silencioso, historico, desktop, pastaOrdens, pastaSap, pastaBackup, xl
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 Set xl = Nothing
 desktop = sh.ExpandEnvironmentStrings("%USERPROFILE%") & "\Desktop"
-pastaIw38 = desktop & "\robo IW38"
 pastaOrdens = desktop & "\robo ordens"
 pastaSap = pastaOrdens & "\relatorios SAP"
 pastaBackup = pastaOrdens & "\backup"
-CriarPasta pastaIw38
 CriarPasta pastaOrdens
 CriarPasta pastaSap
 CriarPasta pastaBackup
 historico = pastaOrdens & "\historico.txt"
 silencioso = False
 If WScript.Arguments.Count > 0 Then silencioso = (LCase(WScript.Arguments(0)) = "/silencioso")
+
+' So um robo por vez mexendo no SAP (evita dois cliques rodarem dois robos juntos).
+' O arquivo fica aberto enquanto o robo roda; o Windows solta sozinho quando ele termina.
+Dim trava
+On Error Resume Next
+Set trava = fso.OpenTextFile(sh.ExpandEnvironmentStrings("%TEMP%") & "\robo_sap.trava", 2, True)
+If Err.Number <> 0 Then
+  If Not silencioso Then MsgBox "O robo ja esta rodando neste PC. Espere ele terminar.", vbExclamation, "Robo ORDENS"
+  WScript.Quit 1
+End If
+On Error GoTo 0
 
 ' ---------- 0. SAP aberto e logado; planilha base na pasta ----------
 Dim SapGuiAuto, application, connection, session
@@ -98,14 +113,14 @@ Checar "preencher a IW38"
 Executar
 If Not Existe("wnd[0]/usr/cntlGRID1/shellcont/shell") Then Falhar "A IW38 nao retornou a lista (nenhuma ordem ou tela diferente da esperada)."
 Dim arqIw38
-arqIw38 = pastaIw38 & "\IW38.xlsx"
+arqIw38 = pastaSap & "\IW38.xlsx"
 Apagar arqIw38
 desde = Now
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").setCurrentCell -1, ""
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectAll
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").contextMenu
 session.findById("wnd[0]/usr/cntlGRID1/shellcont/shell").selectContextMenuItem "&XXL"
-SalvarComo pastaIw38, "IW38.xlsx"
+SalvarComo pastaSap, "IW38.xlsx"
 Checar "exportar a IW38"
 On Error GoTo 0
 EsperarArquivo arqIw38, desde
@@ -115,14 +130,17 @@ Registrar "IW38: " & (UBound(ordens) + 1) & " ordens"
 
 ' ---------- 2. ZPMX0018: itens de reserva (a base) ----------
 Inicio "ZPMX0018"
+EsperarCampo "wnd[0]/usr/ctxtS_SWERK-LOW", "ZPMX0018"
+Preencher "wnd[0]/usr/chkP_ENCE", True
+Preencher "wnd[0]/usr/ctxtS_SWERK-LOW", CENTRO
+Preencher "wnd[0]/usr/ctxtS_ERDAT-LOW", DATA_DE
+Preencher "wnd[0]/usr/ctxtS_ERDAT-HIGH", DATA_ATE
 On Error Resume Next
-session.findById("wnd[0]/usr/chkP_ENCE").selected = True
-session.findById("wnd[0]/usr/ctxtS_SWERK-LOW").text = CENTRO
-session.findById("wnd[0]/usr/ctxtS_ERDAT-LOW").text = DATA_DE
-session.findById("wnd[0]/usr/ctxtS_ERDAT-HIGH").text = DATA_ATE
 ColarLista "wnd[0]/usr/btn%_S_AUFNR_%_APP_%-VALU_PUSH", ordens
-session.findById("wnd[0]/usr/ctxtP_LAYOUT").text = ZPM_LAYOUT
-Checar "preencher a ZPMX0018"
+Checar "colar as ordens na ZPMX0018"
+On Error GoTo 0
+Preencher "wnd[0]/usr/ctxtP_LAYOUT", ZPM_LAYOUT
+On Error Resume Next
 Executar
 If Not Existe("wnd[0]/usr/cntlCC_ALV/shellcont/shell") Then Falhar "A ZPMX0018 nao retornou a lista (nenhum item ou tela diferente da esperada)."
 Dim arqZpm
@@ -147,6 +165,11 @@ Dim zElim : zElim = Coluna(zpm, Array("item foi eliminado", "eli"), False)
 Dim zStatus : zStatus = Coluna(zpm, Array("status do item", "stat item"), False)
 ' RC e pedido so interessam para itens nao eliminados (sao ~1/6 da base e o SAP aguenta colar).
 Dim acomps : acomps = Acompanhamentos(zpm, zReserva, zItem, zElim, zStatus)
+' Itens nao eliminados: so eles recebem Status RC / Status PO
+Dim ativos : Set ativos = CreateObject("Scripting.Dictionary")
+For i = 0 To UBound(acomps)
+  ativos(acomps(i)) = True
+Next
 Registrar "ZPMX0018: " & (UBound(zpm, 1) - 1) & " itens, " & (UBound(materiais) + 1) & " materiais, " & (UBound(acomps) + 1) & " reservas/itens nao eliminados"
 
 ' ---------- 3. IWBK: texto da reserva ----------
@@ -181,14 +204,19 @@ Checar "preencher a ZMR37"
 Executar
 On Error GoTo 0
 Dim mrps : Set mrps = CreateObject("Scripting.Dictionary")
+Dim estoque : Set estoque = CreateObject("Scripting.Dictionary")
+Dim mLivre
 If ExportarPeloMenu("wnd[0]/mbar/menu[0]/menu[3]/menu[1]", "ZMR37.xlsx") Then
   Dim zmr : zmr = LerXlsx(pastaSap & "\ZMR37.xlsx")
   Dim mMat, mTipo
   mMat = Coluna(zmr, Array("material"), True)
   mTipo = Coluna(zmr, Array("tipo de mrp", "tpm"), True)
+  mLivre = Coluna(zmr, Array("utilizacao livre", "utiliz.livre", "estoque livre"), False)
   For r = 2 To UBound(zmr, 1)
     mrps(SemZeros(zmr(r, mMat))) = Trim(CStr(zmr(r, mTipo) & ""))
+    If mLivre > 0 Then estoque(SemZeros(zmr(r, mMat))) = ParaNumero(zmr(r, mLivre))
   Next
+  If mLivre = 0 Then Registrar "Aviso: a ZMR37 nao trouxe 'Utilizacao livre'; Status RC nao vai separar 'Sem RC - tem estoque'"
 End If
 Registrar "ZMR37: MRP de " & mrps.Count & " materiais"
 
@@ -236,6 +264,8 @@ Executar
 EscolherLayout ME5A_LAYOUT
 On Error GoTo 0
 Dim infoRc : Set infoRc = CreateObject("Scripting.Dictionary")
+Dim libDe : Set libDe = CreateObject("Scripting.Dictionary")
+Dim aLib
 If ExportarTexto("ME5A.txt") Then
   Dim me5a : me5a = LerTexto(pastaSap & "\ME5A.txt", "reqc")
   If Not IsArray(me5a) Then me5a = LerTexto(pastaSap & "\ME5A.txt", "requisicao de compra")
@@ -245,8 +275,11 @@ If ExportarTexto("ME5A.txt") Then
   aData = Coluna(me5a, Array("dtasolic", "data da solicitacao"), True)
   aAc = Coluna(me5a, Array("no acomp.", "no acompanhamento"), False)
   aMat = Coluna(me5a, Array("material"), False)
+  aLib = Coluna(me5a, Array("lib", "indicador de liberacao", "status de liberacao"), False)
+  If aLib = 0 Then Registrar "Aviso: o layout da ME5A nao trouxe a coluna 'Lib'; RC sem pedido fica como 'RC em aberto'"
   For r = 2 To UBound(me5a, 1)
     doc = SemZeros(me5a(r, aRc))
+    If aLib > 0 And doc <> "" Then GuardarLib doc, UCase(Trim(me5a(r, aLib) & ""))
     ' Pelo no de acompanhamento quando o layout traz; senao pelo material.
     If aAc > 0 Then Juntar infoRc, SemZeros(me5a(r, aAc)) & "|" & doc, SemZeros(me5a(r, aItem)), DataTexto(me5a(r, aData))
     If aMat > 0 Then Juntar infoRc, SemZeros(me5a(r, aMat)) & "#" & doc, SemZeros(me5a(r, aItem)), DataTexto(me5a(r, aData))
@@ -279,6 +312,53 @@ If ExportarTexto("ME2M.txt") Then
   Next
 End If
 Registrar "ME2M: " & infoPo.Count & " pedidos/itens"
+
+' ---------- 7b. ME2M com WE101: so pedidos que ainda faltam entregar ----------
+' Pedido que nao aparece aqui ja foi entregue. Sem isso, todo pedido entregue
+' com data passada viraria "atrasado".
+Inicio "ME2M"
+EsperarCampo "wnd[0]/usr/ctxtSELPA-LOW", "ME2M (WE101)"
+On Error Resume Next
+ColarLista "wnd[0]/usr/btn%_EM_MATNR_%_APP_%-VALU_PUSH", materiais
+Checar "colar os materiais na ME2M (WE101)"
+On Error GoTo 0
+Preencher "wnd[0]/usr/ctxtEM_WERKS-LOW", CENTRO
+Preencher "wnd[0]/usr/ctxtLISTU", "ALV"
+Preencher "wnd[0]/usr/ctxtSELPA-LOW", "WE101"
+On Error Resume Next
+Executar
+session.findById("wnd[0]/mbar/menu[3]/menu[0]/menu[1]").select
+Err.Clear
+On Error GoTo 0
+Dim abertos : Set abertos = CreateObject("Scripting.Dictionary")
+Dim abertosOk : abertosOk = False
+If ExportarTexto("ME2M_WE101.txt") Then
+  Dim me2a : me2a = LerTexto(pastaSap & "\ME2M_WE101.txt", "doc.compra")
+  If IsArray(me2a) Then
+    Dim qAc, qDoc, qData, qChave, qDt
+    qAc = Coluna(me2a, Array("no acomp.", "no acompanhamento"), True)
+    qDoc = Coluna(me2a, Array("doc.compra", "documento de compras"), True)
+    qData = Coluna(me2a, Array("datarem.", "data de remessa"), True)
+    For r = 2 To UBound(me2a, 1)
+      qChave = SemZeros(me2a(r, qAc)) & "|" & SemZeros(me2a(r, qDoc))
+      qDt = DataSap(me2a(r, qData))
+      ' Varias divisoes do mesmo pedido: fica a ultima data (as primeiras costumam ser as ja entregues)
+      If Left(qChave, 1) <> "|" And Not IsEmpty(qDt) Then
+        If Not abertos.Exists(qChave) Then
+          abertos(qChave) = qDt
+        ElseIf qDt > abertos(qChave) Then
+          abertos(qChave) = qDt
+        End If
+      End If
+    Next
+    abertosOk = True
+  End If
+End If
+If abertosOk Then
+  Registrar "ME2M WE101: " & abertos.Count & " pedidos ainda a entregar"
+Else
+  Registrar "Aviso: ME2M com WE101 nao trouxe dados; Status PO fica como estava na planilha"
+End If
 On Error Resume Next
 session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
 session.findById("wnd[0]").sendVKey 0
@@ -289,11 +369,14 @@ Dim resumo : resumo = MontarPlanilhaBase()
 Registrar resumo
 
 ' ---------- 9. Envia para o app ----------
-Dim resultado
+Dim resultado, resultadoIw38
 resultado = EnviarPlanilha(caminhoBase, PLANILHA_BASE)
 Registrar resultado
+' IW38 tambem vai para o app: status SAP das ordens e OMs sem itens de material
+resultadoIw38 = EnviarPlanilha(arqIw38, "IW38.xlsx")
+Registrar resultadoIw38
 FecharExcel
-If Not silencioso Then MsgBox "Pronto. Planilha base atualizada e app atualizado:" & vbCrLf & vbCrLf & resumo & vbCrLf & vbCrLf & resultado, vbInformation, "Robo ORDENS"
+If Not silencioso Then MsgBox "Pronto. Planilha base atualizada e app atualizado:" & vbCrLf & vbCrLf & resumo & vbCrLf & vbCrLf & resultado & vbCrLf & resultadoIw38, vbInformation, "Robo ORDENS"
 
 
 ' =====================================================================
@@ -302,13 +385,13 @@ If Not silencioso Then MsgBox "Pronto. Planilha base atualizada e app atualizado
 Function MontarPlanilhaBase()
   Dim copiaBackup, wb, ws, wsGrupos, s, ant, nAnt, nCols, c, cab, h, porChave, gr, n, k, linha, v
   Dim mat, gpm, msg, zc, resp
-  Dim nRc, nPo, nTexto, nMrp, nManual, manuais, faltando
+  Dim nRc, nPo, nTexto, nMrp, nManual, manuais, faltando, novaData, nAtraso, nAntigo
   Set manuais = CreateObject("Scripting.Dictionary")
-  For Each h In Array("status do processo", "observacao", "status rc", "status po", "apoio", "nova data")
+  For Each h In Array("status do processo", "observacao", "apoio", "nova data")
     manuais(h) = True
   Next
   Set faltando = CreateObject("Scripting.Dictionary")
-  nRc = 0 : nPo = 0 : nTexto = 0 : nMrp = 0 : nManual = 0
+  nRc = 0 : nPo = 0 : nTexto = 0 : nMrp = 0 : nManual = 0 : nAtraso = 0 : nAntigo = 0
   ' Copia de seguranca antes de mexer
   copiaBackup = pastaBackup & "\" & Replace(PLANILHA_BASE, ".xlsx", "") & "_" & Year(Now) & Dois(Month(Now)) & Dois(Day(Now)) & "_" & Dois(Hour(Now)) & Dois(Minute(Now)) & ".xlsx"
   On Error Resume Next
@@ -435,6 +518,20 @@ Function MontarPlanilhaBase()
           If posDe.Exists(ac) Then v = Detalhe(infoPo, posDe(ac), ac, "", True)
         Case "data remessa"
           If posDe.Exists(ac) Then v = Detalhe(infoPo, posDe(ac), ac, "", False)
+        Case "status rc"
+          If ativos.Exists(ac) Then v = StatusRc(ac, mat)
+        Case "status po"
+          If Not ativos.Exists(ac) Then
+            v = Empty
+          ElseIf abertosOk Then
+            novaData = Empty
+            If k > 0 And cab.Exists("nova data") Then novaData = ant(k, cab("nova data"))
+            v = StatusPo(ac, novaData)
+            If v = "Atrasado" Then nAtraso = nAtraso + 1
+            If v = "PO antigo - verificar" Then nAntigo = nAntigo + 1
+          ElseIf k > 0 Then
+            v = ant(k, c)
+          End If
         Case Else
           If zc.Exists(h) Then
             v = zpm(n, zc(h))
@@ -464,7 +561,7 @@ Function MontarPlanilhaBase()
   On Error GoTo 0
   wb.Close False
   MontarPlanilhaBase = "Planilha base: " & (UBound(out, 1) + 1) & " linhas | texto reserva " & nTexto & " | MRP " & nMrp & _
-    " | RC " & nRc & " | pedido " & nPo & " | anotacoes mantidas em " & nManual & " linhas"
+    " | RC " & nRc & " | pedido " & nPo & " | PO atrasado " & nAtraso & " | PO antigo " & nAntigo & " | anotacoes mantidas em " & nManual & " linhas"
   If faltando.Count > 0 Then MontarPlanilhaBase = MontarPlanilhaBase & vbCrLf & "ATENCAO, colunas que a ZPMX0018 nao trouxe (ficaram vazias): " & Unir(faltando.Keys, ", ")
 End Function
 
@@ -566,16 +663,68 @@ End Function
 ' =====================================================================
 ' Abre a transacao (do zero). Deixa "On Error Resume Next" ligado: quem chama confere com Checar.
 Sub Inicio(transacao)
+  Dim i
   Registrar transacao
   On Error Resume Next
+  ' Fecha janelinhas que tenham sobrado da etapa anterior (elas travam o /n)
+  For i = 1 To 5
+    If Not Existe("wnd[1]") Then Exit For
+    Registrar "Aviso: fechando janela aberta antes da " & transacao & ": " & TextoJanela("wnd[1]")
+    session.findById("wnd[1]").close
+    Esperar 1
+  Next
   session.findById("wnd[0]").maximize
   session.findById("wnd[0]/tbar[0]/okcd").text = "/n" & transacao
   session.findById("wnd[0]").sendVKey 0
+  Esperar 2
   If Err.Number <> 0 Then Falhar "Nao consegui abrir a transacao " & transacao & ": " & Err.Description
 End Sub
 
+' Espera um campo da tela aparecer (SAP lento). Falha dizendo em que tela parou.
+Sub EsperarCampo(id, transacao)
+  Dim i
+  For i = 1 To 30
+    If Existe(id) Then Exit Sub
+    Esperar 1
+  Next
+  Falhar "A tela da " & transacao & " nao abriu como esperado (campo " & id & " nao existe)." & vbCrLf & "Tela atual: " & TelaAtual()
+End Sub
+
+' Preenche um campo; se nao existir, diz qual campo e em que tela.
+Sub Preencher(id, valor)
+  On Error Resume Next
+  If Not Existe(id) Then Falhar "Campo nao encontrado: " & id & vbCrLf & "Tela atual: " & TelaAtual()
+  If VarType(valor) = vbBoolean Then
+    session.findById(id).selected = valor
+  Else
+    session.findById(id).text = valor
+  End If
+  If Err.Number <> 0 Then Falhar "Nao consegui preencher " & id & ": " & Err.Description & vbCrLf & "Tela atual: " & TelaAtual()
+End Sub
+
+Sub Esperar(segundos)
+  Dim i
+  WScript.Sleep segundos * 1000
+  For i = 1 To 60
+    If Not session.Busy Then Exit Sub
+    WScript.Sleep 500
+  Next
+End Sub
+
+Function TextoJanela(id)
+  On Error Resume Next
+  TextoJanela = session.findById(id).text
+  If Existe(id & "/usr/txtMESSTXT1") Then TextoJanela = TextoJanela & " - " & session.findById(id & "/usr/txtMESSTXT1").text
+End Function
+
+Function TelaAtual()
+  On Error Resume Next
+  TelaAtual = session.Info.Transaction & " / " & TextoJanela("wnd[0]") & " | barra: " & session.findById("wnd[0]/sbar").text
+  If Existe("wnd[1]") Then TelaAtual = TelaAtual & " | janela aberta: " & TextoJanela("wnd[1]")
+End Function
+
 Sub Checar(oque)
-  If Err.Number <> 0 Then Falhar "Falha ao " & oque & ": " & Err.Description
+  If Err.Number <> 0 Then Falhar "Falha ao " & oque & ": " & Err.Description & vbCrLf & "Tela atual: " & TelaAtual()
   Err.Clear
 End Sub
 
@@ -605,7 +754,7 @@ Sub SalvarComo(pasta, nome)
   If Existe("wnd[1]/usr/ctxtDY_PATH") Then
     session.findById("wnd[1]/usr/ctxtDY_PATH").text = pasta
     If Existe("wnd[1]/usr/ctxtDY_FILENAME") Then session.findById("wnd[1]/usr/ctxtDY_FILENAME").text = nome
-    session.findById("wnd[1]/tbar[0]/btn[0]").press
+    ConfirmarSalvar nome
   Else
     Registrar "Aviso: janela de pasta nao apareceu como esperado (" & nome & ")"
   End If
@@ -652,7 +801,7 @@ Function ExportarTexto(nome)
   session.findById("wnd[1]/tbar[0]/btn[0]").press
   session.findById("wnd[1]/usr/ctxtDY_PATH").text = pastaSap
   session.findById("wnd[1]/usr/ctxtDY_FILENAME").text = nome
-  session.findById("wnd[1]/tbar[0]/btn[0]").press
+  ConfirmarSalvar nome
   Checar "salvar " & nome
   On Error GoTo 0
   EsperarArquivo caminho, inicioSalvar
@@ -671,9 +820,11 @@ Sub EscolherLayout(nome)
     Exit Sub
   End If
   For lin = 0 To grid.RowCount - 1
+    ' A lista so carrega as linhas visiveis: rola para o SAP carregar o resto
+    If lin Mod 15 = 0 Then grid.firstVisibleRow = lin
     For c = 0 To grid.ColumnOrder.Count - 1
       col = grid.ColumnOrder(c)
-      If UCase(Trim(grid.GetCellValue(lin, col))) = UCase(nome) Then
+      If Normalizar(grid.GetCellValue(lin, col)) = Normalizar(nome) Then
         grid.currentCellRow = lin
         grid.selectedRows = CStr(lin)
         grid.clickCurrentCell
@@ -708,6 +859,25 @@ End Sub
 Sub Apagar(caminho)
   On Error Resume Next
   If fso.FileExists(caminho) Then fso.DeleteFile caminho, True
+  Err.Clear
+  If fso.FileExists(caminho) Then Falhar "Nao consegui apagar o arquivo antigo " & caminho & vbCrLf & _
+    "Ele deve estar aberto no Excel. Feche e rode o robo de novo."
+End Sub
+
+' Botao "Gerar" da janela de salvar. Se o SAP disser que o arquivo ja existe,
+' usa "Substituir"; se a janela continuar aberta, para e diz o motivo.
+Sub ConfirmarSalvar(nome)
+  On Error Resume Next
+  session.findById("wnd[1]/tbar[0]/btn[0]").press
+  WScript.Sleep 1000
+  If Existe("wnd[1]/usr/ctxtDY_FILENAME") And Existe("wnd[1]/tbar[0]/btn[11]") Then
+    session.findById("wnd[1]/tbar[0]/btn[11]").press
+    WScript.Sleep 1000
+  End If
+  If Existe("wnd[1]/usr/ctxtDY_FILENAME") Then
+    Falhar "O SAP nao conseguiu salvar " & nome & ": " & session.findById("wnd[0]/sbar").text & vbCrLf & _
+      "Feche esse arquivo se estiver aberto no Excel e rode de novo."
+  End If
   Err.Clear
 End Sub
 
@@ -901,6 +1071,105 @@ Function SoDigitosFalso(v)
 End Function
 
 ' Data do SAP "22.10.2027" -> "22/10/2027"
+' ---------- Status automaticos (regras combinadas com a Erica) ----------
+' Status RC: pedido > RC (pela coluna Lib da ME5A) > sem RC (com ou sem estoque)
+Function StatusRc(acomp, mat)
+  Dim d, pior, l
+  If posDe.Exists(acomp) Then
+    StatusRc = "Virou PO"
+  ElseIf rcsDe.Exists(acomp) Then
+    pior = ""
+    For Each d In rcsDe(acomp).Keys
+      l = ""
+      If libDe.Exists(d) Then l = libDe(d)
+      If PesoLib(l) > PesoLib(pior) Then pior = l
+    Next
+    Select Case pior
+      Case "L" : StatusRc = "RC aprovada - aguardando PO"
+      Case "X" : StatusRc = "RC aguardando libera" & ChrW(231) & ChrW(227) & "o"
+      Case "P" : StatusRc = "RC parcialmente liberada"
+      Case "9" : StatusRc = "RC fixada pelo gerente"
+      Case Else : StatusRc = "RC em aberto"
+    End Select
+  ElseIf estoque.Exists(mat) Then
+    If estoque(mat) > 0 Then StatusRc = "Sem RC - tem estoque" Else StatusRc = "Sem RC"
+  Else
+    StatusRc = "Sem RC"
+  End If
+End Function
+
+' Quanto maior, mais atrasada a RC esta no caminho ate virar pedido
+Function PesoLib(l)
+  Select Case l
+    Case "X" : PesoLib = 5
+    Case "P" : PesoLib = 4
+    Case "9" : PesoLib = 3
+    Case "L" : PesoLib = 2
+    Case "" : PesoLib = 0
+    Case Else : PesoLib = 1
+  End Select
+End Function
+
+Sub GuardarLib(rc, l)
+  If Not libDe.Exists(rc) Then
+    libDe(rc) = l
+  ElseIf PesoLib(l) > PesoLib(libDe(rc)) Then
+    libDe(rc) = l
+  End If
+End Sub
+
+' Status PO: pior caso entre os pedidos do item. Sem os dias no texto, de proposito:
+' assim o status so muda quando muda de faixa (e o app nao acusa mudanca todo dia).
+Function StatusPo(acomp, novaData)
+  Dim d, dt, dias, peso, pior, txt
+  StatusPo = Empty
+  If Not posDe.Exists(acomp) Then Exit Function
+  pior = 0
+  For Each d In posDe(acomp).Keys
+    If abertos.Exists(acomp & "|" & d) Then
+      dt = abertos(acomp & "|" & d)
+      ' NOVA DATA (prazo renegociado) vale mais que a data do pedido
+      If Not IsEmpty(novaData) And Not IsNull(novaData) And CStr(novaData) <> "" Then
+        If IsDate(novaData) Then dt = CDate(novaData)
+      End If
+      dias = DateDiff("d", dt, Date)
+      If dias > DIAS_PO_ANTIGO Then
+        peso = 4
+      ElseIf dias > 0 Then
+        peso = 3
+      Else
+        peso = 2
+      End If
+    Else
+      peso = 1
+    End If
+    If peso > pior Then pior = peso
+  Next
+  Select Case pior
+    Case 4 : StatusPo = "PO antigo - verificar"
+    Case 3 : StatusPo = "Atrasado"
+    Case 2 : StatusPo = "No prazo"
+    Case 1 : StatusPo = "Entregue"
+  End Select
+End Function
+
+' "22.10.2027" -> data; vazio se nao for data
+Function DataSap(v)
+  Dim t
+  DataSap = Empty
+  t = Trim(CStr(v & ""))
+  If Len(t) = 10 And Mid(t, 3, 1) = "." And Mid(t, 6, 1) = "." Then
+    If IsNumeric(Left(t, 2)) And IsNumeric(Mid(t, 4, 2)) And IsNumeric(Right(t, 4)) Then
+      DataSap = DateSerial(CInt(Right(t, 4)), CInt(Mid(t, 4, 2)), CInt(Left(t, 2)))
+    End If
+  End If
+End Function
+
+Function ParaNumero(v)
+  ParaNumero = 0
+  If IsNumeric(v) Then ParaNumero = CDbl(v)
+End Function
+
 Function DataTexto(v)
   DataTexto = Replace(Trim(CStr(v & "")), ".", "/")
 End Function
@@ -972,9 +1241,9 @@ Function EnviarPlanilha(caminho, nome)
     bytes = todo.Read(PARTE_BYTES)
     EnviarParte bytes, envio, parte, total, nome, status, texto, erro
     If parte < total Then
-      If status <> 202 Then Falhar "A planilha base foi salva, mas o envio para o app falhou (parte " & parte & " de " & total & ")." & vbCrLf & vbCrLf & erro & vbCrLf & texto
+      If status <> 202 Then Falhar "A planilha base foi salva, mas o envio de " & nome & " para o app falhou (parte " & parte & " de " & total & ")." & vbCrLf & vbCrLf & erro & vbCrLf & texto
     ElseIf status <> 200 Then
-      Falhar "A planilha base foi salva, mas o envio para o app falhou." & vbCrLf & vbCrLf & erro & vbCrLf & texto & vbCrLf & vbCrLf & _
+      Falhar "A planilha base foi salva, mas o envio de " & nome & " para o app falhou." & vbCrLf & vbCrLf & erro & vbCrLf & texto & vbCrLf & vbCrLf & _
         "Teste: abra " & URL_APP & " no navegador deste PC."
     End If
   Next
