@@ -296,6 +296,8 @@ On Error Resume Next
 ColarLista "wnd[0]/usr/btn%_EM_MATNR_%_APP_%-VALU_PUSH", materiais
 session.findById("wnd[0]/usr/ctxtEM_WERKS-LOW").text = CENTRO
 session.findById("wnd[0]/usr/ctxtLISTU").text = "ALV"
+' O SAP lembra o WE101 da rodada anterior: aqui tem que ir vazio (todos os pedidos)
+If Existe("wnd[0]/usr/ctxtSELPA-LOW") Then session.findById("wnd[0]/usr/ctxtSELPA-LOW").text = ""
 Checar "preencher a ME2M"
 Executar
 ' Visao "divisoes de remessa": traz a data de remessa
