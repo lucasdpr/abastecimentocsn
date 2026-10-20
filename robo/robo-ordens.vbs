@@ -409,7 +409,8 @@ Function MontarPlanilhaBase()
   On Error GoTo 0
   If wb.ReadOnly Then
     wb.Close False
-    Falhar "A planilha base esta aberta por alguem (" & caminhoBase & "). Feche e rode de novo. Nada foi alterado."
+    Falhar "A planilha base abriu so para leitura: " & MotivoSomenteLeitura(caminhoBase) & vbCrLf & vbCrLf & _
+      "Nada foi alterado. Resolva e rode de novo."
   End If
   Set ws = wb.Worksheets(1)
   Set wsGrupos = Nothing
@@ -1082,6 +1083,35 @@ Function SoDigitosFalso(v)
 End Function
 
 ' Data do SAP "22.10.2027" -> "22/10/2027"
+' Por que o Excel abriu a planilha so para leitura (para a mensagem de erro)
+Function MotivoSomenteLeitura(caminho)
+  Dim trava, f, txt, nome, i, ch
+  On Error Resume Next
+  If (fso.GetFile(caminho).Attributes And 1) <> 0 Then
+    MotivoSomenteLeitura = "o arquivo esta marcado como 'Somente leitura'. Botao direito no arquivo > Propriedades > desmarque 'Somente leitura' (e marque 'Desbloquear', se aparecer)."
+    Exit Function
+  End If
+  trava = fso.GetParentFolderName(caminho) & "\~$" & Mid(fso.GetFileName(caminho), 3)
+  If Not fso.FileExists(trava) Then trava = fso.GetParentFolderName(caminho) & "\~$" & fso.GetFileName(caminho)
+  If fso.FileExists(trava) Then
+    ' O arquivo ~$ guarda o nome de quem abriu (depois do 1o byte)
+    Set f = fso.OpenTextFile(trava, 1)
+    txt = f.Read(54)
+    f.Close
+    nome = ""
+    For i = 2 To Len(txt)
+      ch = Mid(txt, i, 1)
+      If AscW(ch) >= 32 And AscW(ch) < 127 Then nome = nome & ch
+    Next
+    nome = Trim(nome)
+    If nome <> "" Then
+      MotivoSomenteLeitura = "ela esta aberta por " & nome & ". Peca para fechar. Se ninguem estiver com ela aberta, feche todo Excel (Gerenciador de Tarefas > Microsoft Excel > Finalizar tarefa) e apague o arquivo " & fso.GetFileName(trava) & " da pasta."
+      Exit Function
+    End If
+  End If
+  MotivoSomenteLeitura = "provavelmente um Excel invisivel de outra rodada ficou aberto. Abra o Gerenciador de Tarefas (Ctrl+Shift+Esc), finalize todo 'Microsoft Excel' e rode de novo."
+End Function
+
 ' Grava o array em blocos de linhas (o Excel embaralha arrays muito grandes)
 Sub GravarEmBlocos(ws, out, nCols)
   Const BLOCO = 5000
