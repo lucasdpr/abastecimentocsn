@@ -390,7 +390,7 @@ If Not silencioso Then MsgBox "Pronto. Planilha base atualizada e app atualizado
 Function MontarPlanilhaBase()
   Dim copiaBackup, wb, ws, wsGrupos, s, ant, nAnt, nCols, c, cab, h, porChave, gr, n, k, linha, v
   Dim mat, gpm, msg, zc, resp
-  Dim nRc, nPo, nTexto, nMrp, nManual, manuais, faltando, novaData, nAtraso, nAntigo
+  Dim nRc, nPo, nTexto, nMrp, nManual, manuais, faltando, novaData, nAtraso, nAntigo, nErrAnt
   Set manuais = CreateObject("Scripting.Dictionary")
   For Each h In Array("status do processo", "observacao", "apoio", "nova data")
     manuais(h) = True
@@ -425,6 +425,8 @@ Function MontarPlanilhaBase()
   nAnt = ws.Cells(ws.Rows.Count, 1).End(-4162).Row
   If nAnt < 2 Then nAnt = 2
   ant = ws.Range(ws.Cells(1, 1), ws.Cells(nAnt, nCols)).Value
+  nErrAnt = LimparErros(ant)
+  If nErrAnt > 0 Then Registrar "Aviso: a planilha base antiga tinha " & nErrAnt & " celulas com erro do Excel; tratadas como vazias"
   Set cab = CreateObject("Scripting.Dictionary")
   For c = 1 To nCols
     h = Normalizar(ant(1, c))
@@ -458,12 +460,16 @@ Function MontarPlanilhaBase()
   Dim out, colunas
   colunas = cab.Keys
   ReDim out(UBound(zpm, 1) - 2, nCols - 1)
+  Registrar "Montando " & (UBound(zpm, 1) - 1) & " linhas da planilha base"
+  ' Daqui ate o fim do laco: se qualquer conta falhar, para e diz a linha e a coluna
+  On Error Resume Next
   For n = 2 To UBound(zpm, 1)
     linha = n - 2
     ac = SemZeros(zpm(n, zReserva)) & SemZeros(zpm(n, zItem))
     mat = SemZeros(zpm(n, zMaterial))
     gpm = ""
     If zGpm > 0 Then gpm = UCase(Trim(zpm(n, zGpm) & ""))
+    If Err.Number <> 0 Then Falhar "Erro ao ler a linha " & n & " da ZPMX0018 (reserva '" & ac & "'): " & Err.Description & vbCrLf & "A planilha base NAO foi alterada e nada foi enviado ao app. Mande esta mensagem ao Lucas."
     k = 0
     If porChave.Exists(ac) Then
       k = porChave(ac)
@@ -550,8 +556,11 @@ Function MontarPlanilhaBase()
           End If
       End Select
       out(linha, c - 1) = Simples(v)
+      If Err.Number <> 0 Then Falhar "Erro ao montar a linha " & n & " (reserva '" & ac & "'), coluna '" & h & "': " & Err.Description & vbCrLf & "A planilha base NAO foi alterada e nada foi enviado ao app. Mande esta mensagem ao Lucas."
     Next
   Next
+  On Error GoTo 0
+  Registrar "Linhas montadas; gravando e conferindo"
 
   ' Grava: limpa as linhas antigas e escreve as novas em blocos (um bloco gigante,
   ' com mais de 65 mil linhas, chegou embaralhado no Excel em 20/10).
@@ -943,8 +952,24 @@ Sub FecharExcel()
 End Sub
 
 ' Le a primeira aba de um .xlsx (numa copia: o SAP pode ter deixado aberto no Excel). Devolve matriz (1..linhas, 1..colunas).
+' Troca por vazio as celulas que o Excel devolveu como erro (#N/D, #VALOR!...): CStr/& em
+' valor de erro derruba o VBScript com "Tipos incompativeis". Devolve quantas trocou.
+Function LimparErros(arr)
+  Dim i, j, n
+  n = 0
+  For i = 1 To UBound(arr, 1)
+    For j = 1 To UBound(arr, 2)
+      If VarType(arr(i, j)) = vbError Then
+        arr(i, j) = Empty
+        n = n + 1
+      End If
+    Next
+  Next
+  LimparErros = n
+End Function
+
 Function LerXlsx(caminho)
-  Dim copia, wb, ws, ult, cols
+  Dim copia, wb, ws, ult, cols, m, nErr
   copia = sh.ExpandEnvironmentStrings("%TEMP%") & "\robo-leitura-" & fso.GetFileName(caminho)
   On Error Resume Next
   fso.CopyFile caminho, copia, True
@@ -960,7 +985,10 @@ Function LerXlsx(caminho)
   cols = ws.UsedRange.Columns.Count + ws.UsedRange.Column - 1
   If ult < 2 Then ult = 2
   If cols < 2 Then cols = 2
-  LerXlsx = ws.Range(ws.Cells(1, 1), ws.Cells(ult, cols)).Value
+  m = ws.Range(ws.Cells(1, 1), ws.Cells(ult, cols)).Value
+  nErr = LimparErros(m)
+  If nErr > 0 Then Registrar "Aviso: " & fso.GetFileName(caminho) & " tinha " & nErr & " celulas com erro do Excel; tratadas como vazias"
+  LerXlsx = m
   wb.Close False
   On Error Resume Next
   fso.DeleteFile copia, True
@@ -1068,6 +1096,10 @@ End Function
 
 Function SemZeros(valor)
   Dim v
+  If VarType(valor) = vbError Then
+    SemZeros = ""
+    Exit Function
+  End If
   ' O SAP as vezes poe um espaco "nao separavel" (ChrW 160) na frente do numero.
   v = Trim(Replace(CStr(valor & ""), ChrW(160), " "))
   Do While Len(v) > 1 And Left(v, 1) = "0"
@@ -1208,7 +1240,7 @@ End Function
 ' Valor simples para o Excel: texto, numero, data ou vazio (nunca objeto/array)
 Function Simples(v)
   Select Case VarType(v)
-    Case vbEmpty, vbNull : Simples = Empty
+    Case vbEmpty, vbNull, vbError : Simples = Empty
     Case vbString
       Simples = CStr(v)
       ' Texto que comeca com = + - @ o Excel le como formula (vira #NOME?/#VALOR!): grava como texto
@@ -1339,6 +1371,10 @@ End Function
 ' minusculas, sem acento, espacos simples; "No" com o/a ordinal -> "no", "1a" -> "1a"
 Function Normalizar(v)
   Dim s, de, para, p
+  If VarType(v) = vbError Then
+    Normalizar = ""
+    Exit Function
+  End If
   s = LCase(Trim(Replace(CStr(v & ""), ChrW(160), " ")))
   de = Array(&HE1, &HE0, &HE2, &HE3, &HE4, &HE9, &HE8, &HEA, &HED, &HEC, &HF3, &HF2, &HF4, &HF5, &HFA, &HF9, &HFC, &HE7, &HBA, &HB0, &HAA)
   para = Array("a", "a", "a", "a", "a", "e", "e", "e", "i", "i", "o", "o", "o", "o", "u", "u", "u", "c", "o", "o", "a")
