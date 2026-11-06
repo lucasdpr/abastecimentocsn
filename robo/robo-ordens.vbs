@@ -307,13 +307,19 @@ On Error GoTo 0
 Dim infoPo : Set infoPo = CreateObject("Scripting.Dictionary")
 If ExportarME2M("ME2M.txt") Then
   Dim me2m : me2m = LerTexto(pastaSap & "\ME2M.txt", "doc.compra")
-  Dim pAc, pDoc, pItem, pData
-  pAc = Coluna(me2m, Array("no acomp.", "no acompanhamento"), True)
+  Dim pAc, pMat, pDoc, pItem, pData
+  pAc = Coluna(me2m, Array("no acomp.", "no acompanhamento"), False)
+  pMat = Coluna(me2m, Array("material"), True)
   pDoc = Coluna(me2m, Array("doc.compra", "documento de compras"), True)
   pItem = Coluna(me2m, Array("itm", "item"), True)
   pData = Coluna(me2m, Array("datarem.", "data de remessa"), True)
+  If pAc = 0 Then Registrar "Aviso: a ME2M veio sem a coluna No acomp.; vou casar por material + pedido (itens do mesmo material no mesmo pedido podem se juntar). Para evitar: na ME2M, salve um layout com a coluna No acomp. como padrao."
   For r = 2 To UBound(me2m, 1)
-    Juntar infoPo, SemZeros(me2m(r, pAc)) & "|" & SemZeros(me2m(r, pDoc)), SemZeros(me2m(r, pItem)), DataTexto(me2m(r, pData))
+    If pAc > 0 Then
+      Juntar infoPo, SemZeros(me2m(r, pAc)) & "|" & SemZeros(me2m(r, pDoc)), SemZeros(me2m(r, pItem)), DataTexto(me2m(r, pData))
+    Else
+      Juntar infoPo, SemZeros(me2m(r, pMat)) & "#" & SemZeros(me2m(r, pDoc)), SemZeros(me2m(r, pItem)), DataTexto(me2m(r, pData))
+    End If
   Next
 End If
 Registrar "ME2M: " & infoPo.Count & " pedidos/itens"
@@ -340,15 +346,20 @@ Dim abertosOk : abertosOk = False
 If ExportarME2M("ME2M_WE101.txt") Then
   Dim me2a : me2a = LerTexto(pastaSap & "\ME2M_WE101.txt", "doc.compra")
   If IsArray(me2a) Then
-    Dim qAc, qDoc, qData, qChave, qDt
-    qAc = Coluna(me2a, Array("no acomp.", "no acompanhamento"), True)
+    Dim qAc, qMat, qDoc, qData, qChave, qDt
+    qAc = Coluna(me2a, Array("no acomp.", "no acompanhamento"), False)
+    qMat = Coluna(me2a, Array("material"), True)
     qDoc = Coluna(me2a, Array("doc.compra", "documento de compras"), True)
     qData = Coluna(me2a, Array("datarem.", "data de remessa"), True)
     For r = 2 To UBound(me2a, 1)
-      qChave = SemZeros(me2a(r, qAc)) & "|" & SemZeros(me2a(r, qDoc))
+      If qAc > 0 Then
+        qChave = SemZeros(me2a(r, qAc)) & "|" & SemZeros(me2a(r, qDoc))
+      Else
+        qChave = SemZeros(me2a(r, qMat)) & "#" & SemZeros(me2a(r, qDoc))
+      End If
       qDt = DataSap(me2a(r, qData))
       ' Varias divisoes do mesmo pedido: fica a ultima data (as primeiras costumam ser as ja entregues)
-      If Left(qChave, 1) <> "|" And Not IsEmpty(qDt) Then
+      If Left(qChave, 1) <> "|" And Left(qChave, 1) <> "#" And Not IsEmpty(qDt) Then
         If Not abertos.Exists(qChave) Then
           abertos(qChave) = qDt
         ElseIf qDt > abertos(qChave) Then
@@ -527,9 +538,9 @@ Function MontarPlanilhaBase()
             nPo = nPo + 1
           End If
         Case "item po"
-          If posDe.Exists(ac) Then v = Detalhe(infoPo, posDe(ac), ac, "", True)
+          If posDe.Exists(ac) Then v = Detalhe(infoPo, posDe(ac), ac, mat, True)
         Case "data remessa"
-          If posDe.Exists(ac) Then v = Detalhe(infoPo, posDe(ac), ac, "", False)
+          If posDe.Exists(ac) Then v = Detalhe(infoPo, posDe(ac), ac, mat, False)
         Case "status rc"
           If ativos.Exists(ac) Then v = StatusRc(ac, mat)
         Case "status po"
@@ -538,7 +549,7 @@ Function MontarPlanilhaBase()
           ElseIf abertosOk Then
             novaData = Empty
             If k > 0 And cab.Exists("nova data") Then novaData = ant(k, cab("nova data"))
-            v = StatusPo(ac, novaData)
+            v = StatusPo(ac, mat, novaData)
             If v = "Atrasado" Then nAtraso = nAtraso + 1
             If v = "PO antigo - verificar" Then nAntigo = nAntigo + 1
           ElseIf k > 0 Then
@@ -817,8 +828,9 @@ Function ExportarPeloMenu(menu, nome)
 End Function
 
 ' Lista > Salvar > Arquivo local, texto com tabulacao. False = relatorio sem dados.
-' ME2M: o SAP lembra a ultima visao usada. Se o arquivo vier sem a coluna 'No acomp.',
-' troca a visao (mesmo menu do robo) e exporta de novo, uma vez.
+' ME2M: o SAP lembra a ultima visao usada. Se o arquivo vier sem a data de remessa
+' (visao sem divisoes), troca a visao (mesmo menu do robo) e exporta de novo, uma vez.
+' Sem a coluna No acomp. e so layout: o robo casa por material + pedido (veja a ME2M acima).
 Function ExportarME2M(nome)
   Dim tmp, ok
   ok = ExportarTexto(nome)
@@ -826,8 +838,8 @@ Function ExportarME2M(nome)
   If Not ok Then Exit Function
   tmp = LerTexto(pastaSap & "\" & nome, "doc.compra")
   If IsArray(tmp) Then
-    If Coluna(tmp, Array("no acomp.", "no acompanhamento"), False) = 0 Then
-      Registrar "Aviso: " & nome & " veio sem a coluna No acomp. (colunas: " & ListaColunas(tmp) & "); trocando a visao da ME2M e exportando de novo"
+    If Coluna(tmp, Array("datarem.", "data de remessa"), False) = 0 Then
+      Registrar "Aviso: " & nome & " veio sem a data de remessa (colunas: " & ListaColunas(tmp) & "); trocando a visao da ME2M e exportando de novo"
       On Error Resume Next
       session.findById("wnd[0]/mbar/menu[3]/menu[0]/menu[1]").select
       Err.Clear
@@ -1350,14 +1362,16 @@ End Sub
 
 ' Status PO: pior caso entre os pedidos do item. Sem os dias no texto, de proposito:
 ' assim o status so muda quando muda de faixa (e o app nao acusa mudanca todo dia).
-Function StatusPo(acomp, novaData)
-  Dim d, dt, dias, peso, pior, txt
+Function StatusPo(acomp, mat, novaData)
+  Dim d, dt, dias, peso, pior, txt, chave
   StatusPo = Empty
   If Not posDe.Exists(acomp) Then Exit Function
   pior = 0
   For Each d In posDe(acomp).Keys
-    If abertos.Exists(acomp & "|" & d) Then
-      dt = abertos(acomp & "|" & d)
+    chave = acomp & "|" & d
+    If Not abertos.Exists(chave) And mat <> "" Then chave = mat & "#" & d
+    If abertos.Exists(chave) Then
+      dt = abertos(chave)
       ' NOVA DATA (prazo renegociado) vale mais que a data do pedido
       If Not IsEmpty(novaData) And Not IsNull(novaData) And CStr(novaData) <> "" Then
         If IsDate(novaData) Then dt = CDate(novaData)
