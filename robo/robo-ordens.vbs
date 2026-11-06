@@ -47,7 +47,7 @@ Const ME5A_LAYOUT = ""
 Const DIAS_PO_ANTIGO = 180
 Dim GRUPOS : GRUPOS = Array("5I6", "5I7", "5I8", "5IS", "5I3", "5I5", "8IS", "8IT")
 
-Dim fso, sh, silencioso, historico, desktop, pastaOrdens, pastaSap, pastaBackup, xl
+Dim fso, sh, silencioso, historico, desktop, pastaOrdens, pastaSap, pastaBackup, xl, relAtual
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 Set xl = Nothing
@@ -305,7 +305,7 @@ session.findById("wnd[0]/mbar/menu[3]/menu[0]/menu[1]").select
 Err.Clear
 On Error GoTo 0
 Dim infoPo : Set infoPo = CreateObject("Scripting.Dictionary")
-If ExportarTexto("ME2M.txt") Then
+If ExportarME2M("ME2M.txt") Then
   Dim me2m : me2m = LerTexto(pastaSap & "\ME2M.txt", "doc.compra")
   Dim pAc, pDoc, pItem, pData
   pAc = Coluna(me2m, Array("no acomp.", "no acompanhamento"), True)
@@ -337,7 +337,7 @@ Err.Clear
 On Error GoTo 0
 Dim abertos : Set abertos = CreateObject("Scripting.Dictionary")
 Dim abertosOk : abertosOk = False
-If ExportarTexto("ME2M_WE101.txt") Then
+If ExportarME2M("ME2M_WE101.txt") Then
   Dim me2a : me2a = LerTexto(pastaSap & "\ME2M_WE101.txt", "doc.compra")
   If IsArray(me2a) Then
     Dim qAc, qDoc, qData, qChave, qDt
@@ -817,6 +817,26 @@ Function ExportarPeloMenu(menu, nome)
 End Function
 
 ' Lista > Salvar > Arquivo local, texto com tabulacao. False = relatorio sem dados.
+' ME2M: o SAP lembra a ultima visao usada. Se o arquivo vier sem a coluna 'No acomp.',
+' troca a visao (mesmo menu do robo) e exporta de novo, uma vez.
+Function ExportarME2M(nome)
+  Dim tmp, ok
+  ok = ExportarTexto(nome)
+  ExportarME2M = ok
+  If Not ok Then Exit Function
+  tmp = LerTexto(pastaSap & "\" & nome, "doc.compra")
+  If IsArray(tmp) Then
+    If Coluna(tmp, Array("no acomp.", "no acompanhamento"), False) = 0 Then
+      Registrar "Aviso: " & nome & " veio sem a coluna No acomp. (colunas: " & ListaColunas(tmp) & "); trocando a visao da ME2M e exportando de novo"
+      On Error Resume Next
+      session.findById("wnd[0]/mbar/menu[3]/menu[0]/menu[1]").select
+      Err.Clear
+      On Error GoTo 0
+      ExportarME2M = ExportarTexto(nome)
+    End If
+  End If
+End Function
+
 Function ExportarTexto(nome)
   Dim caminho, inicioSalvar
   ExportarTexto = False
@@ -970,6 +990,7 @@ End Function
 
 Function LerXlsx(caminho)
   Dim copia, wb, ws, ult, cols, m, nErr
+  relAtual = fso.GetFileName(caminho)
   copia = sh.ExpandEnvironmentStrings("%TEMP%") & "\robo-leitura-" & fso.GetFileName(caminho)
   On Error Resume Next
   fso.CopyFile caminho, copia, True
@@ -999,6 +1020,7 @@ End Function
 ' Le o texto com tabulacao que o SAP salva. A matriz comeca na linha do cabecalho (a que tem a coluna "chave").
 Function LerTexto(caminho, chave)
   Dim f, linhas, li, ini, campos, n, m, lin, c, t
+  relAtual = fso.GetFileName(caminho)
   Set f = fso.OpenTextFile(caminho, 1, False, 0)
   t = ""
   If Not f.AtEndOfStream Then t = f.ReadAll
@@ -1053,7 +1075,25 @@ Function Coluna(arr, nomes, obrigatoria)
       End If
     Next
   Next
-  If obrigatoria Then Falhar "Nao achei a coluna '" & nomes(0) & "' no relatorio. O layout mudou?"
+  If obrigatoria Then Falhar "Nao achei a coluna '" & nomes(0) & "' no relatorio " & relAtual & "." & vbCrLf & vbCrLf & _
+    "Colunas que vieram: " & ListaColunas(arr) & vbCrLf & vbCrLf & "O layout do SAP mudou? Mande esta mensagem ao Lucas."
+End Function
+
+' Cabecalho do relatorio em uma linha (para a mensagem de erro)
+Function ListaColunas(arr)
+  Dim c, t
+  t = ""
+  For c = 1 To UBound(arr, 2)
+    If Trim(CStr(arr(1, c) & "")) <> "" Then
+      If t <> "" Then t = t & " | "
+      t = t & Trim(CStr(arr(1, c) & ""))
+    End If
+    If Len(t) > 400 Then
+      t = t & " ..."
+      Exit For
+    End If
+  Next
+  ListaColunas = t
 End Function
 
 ' Valores da coluna, sem repetir (sem zeros na frente quando pedido)
